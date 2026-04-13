@@ -790,6 +790,7 @@ async function loadAll(startId) {
 
     const playoffStart = lg.settings?.playoff_week_start || 15;
     const regWeeks = Math.min(playoffStart - 1, 17);
+    const totalWeeks = lg.settings?.leg || 18; // fetch up to end of playoffs
 
     const weekData = await Promise.all(
       Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
@@ -799,6 +800,16 @@ async function loadAll(startId) {
     );
     const matchupsByWeek = {};
     for (const {w, d} of weekData) matchupsByWeek[w] = d;
+
+    // Also fetch playoff weeks so we can get championship lineups
+    const playoffWeekData = await Promise.all(
+      Array.from({length: 4}, (_,i) => playoffStart + i).map(w =>
+        fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
+          .then(d => ({w, d})).catch(() => ({w, d:[]}))
+      )
+    );
+    const playoffMatchupsByWeek = {};
+    for (const {w, d} of playoffWeekData) playoffMatchupsByWeek[w] = d;
 
     let bracket = [];
     try { bracket = await fetchJ(`${API}/league/${lg.league_id}/winners_bracket`); } catch {}
@@ -812,13 +823,13 @@ async function loadAll(startId) {
     );
     const transactions = txnData.flat();
 
-    allData.push({ lg, users, rosters, matchupsByWeek, bracket, transactions });
+    allData.push({ lg, users, rosters, matchupsByWeek, playoffMatchupsByWeek, playoffStart, bracket, transactions });
   }
 
   showLoading('Loading NFL player names...', 85);
   let playerMap = {};
   try {
-    const cacheKey = 'sleeper_players_v2';
+    const cacheKey = 'sleeper_players_v3';
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       playerMap = JSON.parse(cached);
@@ -843,6 +854,23 @@ async function loadAll(startId) {
   showLoading('Computing stats...', 95);
   await new Promise(r => setTimeout(r, 30));
   dashData = computeStats(allData, leagueName, playerMap);
+
+  // Fetch season-specific team data for each champion roster
+  if (dashData.champRosters.length) {
+    showLoading('Loading champion roster details...', 97);
+    for (const cr of dashData.champRosters) {
+      // Fetch week 14 first (close to playoffs), then fill gaps with week 1
+      for (const wk of [14, 1]) {
+        try {
+          const stats = await fetchJ(`${API}/stats/nfl/regular/${cr.season}/${wk}`);
+          for (const [pid, s] of Object.entries(stats || {})) {
+            if (s?.team && !cr.seasonTeamMap[pid]) cr.seasonTeamMap[pid] = s.team;
+          }
+        } catch {}
+      }
+    }
+  }
+
   renderDashboard();
 }
 
@@ -889,8 +917,9 @@ function computeStats(allData, leagueName, playerMap={}) {
 
   const allMatchups = [];
   const seasonSummaries = [];
+  const champRosters = [];
 
-  for (const {lg, rosters, matchupsByWeek, bracket} of allData) {
+  for (const {lg, rosters, matchupsByWeek, playoffMatchupsByWeek, bracket} of allData) {
     const rto = {};
     for (const r of rosters) { if (r.owner_id) rto[r.roster_id] = r.owner_id; }
     const seasonOwners = new Set(Object.values(rto));
@@ -933,6 +962,22 @@ function computeStats(allData, leagueName, playerMap={}) {
       if (champGame?.w) { const co=rto[champGame.w]; if(co) M(co).championships++; }
       const r1rosters = new Set(bracket.filter(b=>b.r===1).flatMap(b=>[b.t1,b.t2]).filter(Boolean));
       for (const rid of r1rosters) { const oid=rto[rid]; if(oid) M(oid).playoffApps++; }
+
+      // Store champion's roster for the Championships tab
+      if (champGame?.w) {
+        const champRoster = rosters.find(r => r.roster_id === champGame.w);
+        const champOwnerId = rto[champGame.w];
+        const hasGames = allMatchups.some(m => m.season === lg.season);
+        if (champRoster && champOwnerId && hasGames) {
+          champRosters.push({
+            season: lg.season,
+            ownerName: userMap[champOwnerId] || champOwnerId,
+            players: champRoster.players || [],
+            starters: champRoster.starters || [],
+            seasonTeamMap: {}, // filled in below after computeStats
+          });
+        }
+      }
     }
 
     const sPF={}, sW={}, sL={};
@@ -998,9 +1043,13 @@ function computeStats(allData, leagueName, playerMap={}) {
       }
     }
 
-    // Tally trades from transactions
+    // Tally trades from transactions — deduplicate by transaction_id
+    const seenTxnIds = new Set();
     for (const txn of (transactions||[])) {
       if (txn.type !== 'trade') continue;
+      if (txn.status !== 'complete') continue; // only count completed trades
+      if (txn.transaction_id && seenTxnIds.has(txn.transaction_id)) continue;
+      if (txn.transaction_id) seenTxnIds.add(txn.transaction_id);
       const adds = txn.adds || {};
       const drops = txn.drops || {};
       const rosterIds = [...new Set([...Object.values(adds), ...Object.values(drops)])];
@@ -1080,14 +1129,14 @@ function computeStats(allData, leagueName, playerMap={}) {
     }))
     .sort((a,b) => b.count - a.count);
 
-  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,playerMap,allTrades};
+  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,playerMap,allTrades,champRosters};
 }
 
 function renderDashboard() {
   if (!dashData) return;
   const {leagueName,seasons,ownershipChanges} = dashData;
-  const tabs = ['overview','leaderboards','records','head-to-head','seasons','ownership','fun','players'];
-  const tabLabels = {overview:'Overview',leaderboards:'Leaderboards',records:'Records','head-to-head':'Head to Head',seasons:'Seasons',ownership:'Ownership',fun:'Fun',players:'Players'};
+  const tabs = ['overview','leaderboards','records','head-to-head','seasons','ownership','fun','players','champions'];
+  const tabLabels = {overview:'Overview',leaderboards:'Leaderboards',records:'Records','head-to-head':'Head to Head',seasons:'Seasons',ownership:'Ownership',fun:'Fun',players:'Players',champions:'Champions'};
 
   // Inject sticky nav before app div (outside app)
   let nav = document.getElementById('site-nav');
@@ -1116,7 +1165,7 @@ function renderDashboard() {
 function renderTab() {
   const el = document.getElementById('tab-content');
   if (!el) return;
-  const fns = {overview:tabOverview,leaderboards:tabLeaderboards,records:tabRecords,'head-to-head':tabH2H,seasons:tabSeasons,ownership:tabOwnership,fun:tabFun,players:tabPlayers};
+  const fns = {overview:tabOverview,leaderboards:tabLeaderboards,records:tabRecords,'head-to-head':tabH2H,seasons:tabSeasons,ownership:tabOwnership,fun:tabFun,players:tabPlayers,champions:tabChampions};
   el.innerHTML = `<div class="tab-content-inner">${(fns[currentTab] || (() => ''))()}</div>`;
 }
 
@@ -1604,6 +1653,58 @@ function tabPlayers() {
         : tradeRows.join('')}
     </div>`;
 }
+function tabChampions() {
+  const {champRosters, playerMap} = dashData;
+
+  if (!champRosters.length) {
+    return `<div class="section-label">Champions</div>
+      <div class="card-solo"><p style="color:var(--text2);font-size:14px;padding:8px 0">No championship data found.</p></div>`;
+  }
+
+  const POS_COLORS = {
+    QB:['#3d1f6e','#c4b5fd'], RB:['#0d3d2e','#6ee7b7'],
+    WR:['#0c2d4f','#93c5fd'], TE:['#3d2a08','#fcd34d'],
+    K:['#1e1e2e','#9ca3af'],  DEF:['#3d1a0e','#fca5a5'],
+    DST:['#3d1a0e','#fca5a5'],
+  };
+
+  function posChip(pos) {
+    const [bg,fg] = POS_COLORS[pos] || ['#1e1e2e','#9ca3af'];
+    return `<span style="font-family:var(--font-mono);font-size:9px;font-weight:600;padding:2px 5px;border-radius:3px;background:${bg};color:${fg};min-width:32px;text-align:center;display:inline-block;letter-spacing:0.04em;flex-shrink:0">${pos||'?'}</span>`;
+  }
+
+  const sorted = [...champRosters].sort((a,b) => b.season - a.season);
+
+  return `
+    <div class="section-label">Championship rosters by year</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+      ${sorted.map(c => {
+        // Show starters first, then bench — dedupe
+        const starterSet = new Set(c.starters);
+
+        return `<div style="background:var(--dark2);padding:1.25rem 1.5rem">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+            <span style="font-family:var(--font-display);font-size:28px;font-weight:900;font-style:italic;color:var(--gold);letter-spacing:0.04em">${c.season}</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text)">${c.ownerName}</span>
+            <span style="font-family:var(--font-mono);font-size:9px;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;background:var(--gold-dim);padding:2px 6px;border-radius:3px;border:1px solid rgba(240,180,41,0.25)">CHAMP</span>
+          </div>
+
+          ${c.starters.length ? `
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:8px">Starters</div>
+          ${c.starters.map(pid => {
+            const p = playerMap[pid] || {};
+            const team = c.seasonTeamMap[pid] || '';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+              ${posChip(p.pos||'')}
+              <span style="font-size:13px;color:var(--text);flex:1">${p.name || pid}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">${team}</span>
+            </div>`;
+          }).join('')}` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
 loadAll('1313934632156147712').catch(e => {
   render(`<div style="padding:3rem 1rem;text-align:center">
     <div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Could not load league data: ${e.message}</div>
