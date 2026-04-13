@@ -298,7 +298,7 @@ async function loadAll(startId) {
 
   for (let i = 0; i < leagues.length; i++) {
     const lg = leagues[i];
-    const pct = 10 + Math.round((i/leagues.length)*75);
+    const pct = 10 + Math.round((i/leagues.length)*70);
     showLoading(`Loading ${lg.season} (${i+1}/${leagues.length})...`, pct);
 
     const [users, rosters] = await Promise.all([
@@ -321,16 +321,50 @@ async function loadAll(startId) {
     let bracket = [];
     try { bracket = await fetchJ(`${API}/league/${lg.league_id}/winners_bracket`); } catch {}
 
-    allData.push({ lg, users, rosters, matchupsByWeek, bracket });
+    // Fetch transactions for trade data (all weeks)
+    const txnData = await Promise.all(
+      Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
+        fetchJ(`${API}/league/${lg.league_id}/transactions/${w}`)
+          .then(d => d).catch(() => [])
+      )
+    );
+    const transactions = txnData.flat();
+
+    allData.push({ lg, users, rosters, matchupsByWeek, bracket, transactions });
   }
 
-  showLoading('Computing stats...', 92);
+  showLoading('Loading NFL player names...', 85);
+  let playerMap = {};
+  try {
+    const cacheKey = 'sleeper_players_v2';
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      playerMap = JSON.parse(cached);
+    } else {
+      showLoading('Loading NFL player database (one-time, ~5MB)...', 87);
+      const players = await fetchJ(`${API}/players/nfl`);
+      for (const [id, p] of Object.entries(players)) {
+        if (p.full_name || p.first_name) {
+          playerMap[id] = {
+            name: p.full_name || `${p.first_name||''} ${p.last_name||''}`.trim(),
+            pos: p.position || '',
+            team: p.team || '',
+          };
+        }
+      }
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(playerMap)); } catch {}
+    }
+  } catch(e) {
+    console.warn('Player names unavailable, continuing without them:', e);
+  }
+
+  showLoading('Computing stats...', 95);
   await new Promise(r => setTimeout(r, 30));
-  dashData = computeStats(allData, leagueName);
+  dashData = computeStats(allData, leagueName, playerMap);
   renderDashboard();
 }
 
-function computeStats(allData, leagueName) {
+function computeStats(allData, leagueName, playerMap={}) {
   const userMap = {};
   const ownershipHistory = {};
   const ownershipChanges = [];
@@ -450,13 +484,97 @@ function computeStats(allData, leagueName) {
   const totalGames = allMatchups.length;
   const avgScore = allMatchups.reduce((s,m)=>s+m.sA+m.sB,0)/(totalGames*2||1);
 
-  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck};
+  // --- Player stats across all seasons ---
+  // playerPoints: playerId -> {totalPts, weeks, owners: Set, seasons: Set, bestWeek, bestWeekCtx}
+  const playerPoints = {};
+  // tradeCounts: playerId -> number of times traded
+  const tradeCounts = {};
+  // tradeDetails: playerId -> [{season, fromOwner, toOwner}]
+  const tradeDetails = {};
+
+  for (const {lg, matchupsByWeek, transactions, rosters} of allData) {
+    const rto = {};
+    for (const r of rosters) { if (r.owner_id) rto[r.roster_id] = r.owner_id; }
+
+    // Tally player points from matchup players_points
+    for (const [wStr, matchups] of Object.entries(matchupsByWeek)) {
+      const week = parseInt(wStr);
+      for (const mu of (matchups||[])) {
+        const ownerId = rto[mu.roster_id];
+        const pp = mu.players_points || {};
+        for (const [pid, pts] of Object.entries(pp)) {
+          if (!pts || pts <= 0) continue;
+          if (!playerPoints[pid]) playerPoints[pid] = {totalPts:0, weeks:0, owners:new Set(), seasons:new Set(), bestWeek:0, bestWeekCtx:''};
+          const p = playerPoints[pid];
+          p.totalPts += pts;
+          p.weeks++;
+          if (ownerId) p.owners.add(ownerId);
+          p.seasons.add(lg.season);
+          if (pts > p.bestWeek) { p.bestWeek = pts; p.bestWeekCtx = `${lg.season} Wk${week}`; }
+        }
+      }
+    }
+
+    // Tally trades from transactions
+    for (const txn of (transactions||[])) {
+      if (txn.type !== 'trade') continue;
+      const adds = txn.adds || {}; // {playerId: rosterIdTheyWentTo}
+      const drops = txn.drops || {};
+      // Each player that appears in adds was traded TO that roster
+      for (const [pid, toRosterId] of Object.entries(adds)) {
+        tradeCounts[pid] = (tradeCounts[pid]||0) + 1;
+        if (!tradeDetails[pid]) tradeDetails[pid] = [];
+        const toOwner = rto[toRosterId];
+        // Find where they came from (drops)
+        const fromRosterId = Object.entries(drops).find(([p]) => p === pid)?.[1];
+        const fromOwner = fromRosterId ? rto[fromRosterId] : null;
+        tradeDetails[pid].push({
+          season: lg.season,
+          toOwner: toOwner ? (allData.find(d=>d.lg.league_id===lg.league_id)?.users?.find(u=>u.user_id===toOwner)?.display_name || toOwner) : '?',
+          fromOwner: fromOwner ? (allData.find(d=>d.lg.league_id===lg.league_id)?.users?.find(u=>u.user_id===fromOwner)?.display_name || fromOwner) : '?',
+        });
+      }
+    }
+  }
+
+  // Build sorted player leaderboards
+  const topScorers = Object.entries(playerPoints)
+    .map(([pid, s]) => ({
+      pid,
+      name: playerMap[pid]?.name || `Player ${pid}`,
+      pos: playerMap[pid]?.pos || '',
+      team: playerMap[pid]?.team || '',
+      totalPts: s.totalPts,
+      weeks: s.weeks,
+      avgPts: s.totalPts / (s.weeks||1),
+      owners: s.owners.size,
+      seasons: [...s.seasons].sort(),
+      bestWeek: s.bestWeek,
+      bestWeekCtx: s.bestWeekCtx,
+    }))
+    .filter(p => p.weeks >= 2 && p.totalPts > 10)
+    .sort((a,b) => b.totalPts - a.totalPts);
+
+  const topAvgScorers = [...topScorers].filter(p=>p.weeks>=4).sort((a,b)=>b.avgPts-a.avgPts);
+
+  const mostTraded = Object.entries(tradeCounts)
+    .map(([pid, count]) => ({
+      pid,
+      name: playerMap[pid]?.name || `Player ${pid}`,
+      pos: playerMap[pid]?.pos || '',
+      team: playerMap[pid]?.team || '',
+      count,
+      details: tradeDetails[pid] || [],
+    }))
+    .sort((a,b) => b.count - a.count);
+
+  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,playerMap};
 }
 
 function renderDashboard() {
   if (!dashData) return;
   const {leagueName,seasons,ownershipChanges} = dashData;
-  const tabs = ['overview','leaderboards','records','head-to-head','seasons','ownership','fun'];
+  const tabs = ['overview','leaderboards','records','head-to-head','seasons','ownership','fun','players'];
   app.innerHTML = `
     <div class="top-bar">
       <h1>${leagueName}</h1>
@@ -464,7 +582,7 @@ function renderDashboard() {
       ${ownershipChanges.length?`<span class="badge warn">${ownershipChanges.length} ownership change${ownershipChanges.length!==1?'s':''}</span>`:''}
       <button id="resetBtn" style="margin-left:auto;font-size:13px">Change league</button>
     </div>
-    <div class="tabs" id="tabs">${tabs.map(t=>`<button class="tab${t===currentTab?' active':''}${t==='fun'?' fun-tab':''}" data-tab="${t}">${t==='fun'?'✦ Fun':t.charAt(0).toUpperCase()+t.slice(1).replace('-',' ')}</button>`).join('')}</div>
+    <div class="tabs" id="tabs">${tabs.map(t=>`<button class="tab${t===currentTab?' active':''}${t==='fun'?' fun-tab':''}" data-tab="${t}">${t==='fun'?'✦ Fun':t==='players'?'Players':t.charAt(0).toUpperCase()+t.slice(1).replace('-',' ')}</button>`).join('')}</div>
     <div id="tab-content"></div>
     <div class="footer">Stats follow the person, not the franchise slot &mdash; ownership tracked via Sleeper <code>owner_id</code> per season</div>`;
   document.getElementById('resetBtn').onclick = () => showSetup('');
@@ -478,7 +596,7 @@ function renderDashboard() {
 function renderTab() {
   const el = document.getElementById('tab-content');
   if (!el) return;
-  const fns = {overview:tabOverview,leaderboards:tabLeaderboards,records:tabRecords,'head-to-head':tabH2H,seasons:tabSeasons,ownership:tabOwnership,fun:tabFun};
+  const fns = {overview:tabOverview,leaderboards:tabLeaderboards,records:tabRecords,'head-to-head':tabH2H,seasons:tabSeasons,ownership:tabOwnership,fun:tabFun,players:tabPlayers};
   el.innerHTML = (fns[currentTab] || (() => ''))();
 }
 
@@ -580,8 +698,8 @@ function tabRecords() {
 
 function tabH2H() {
   const {managers} = dashData;
-  const top = managers.slice(0,10);
-  const sn = m => m.name.split(' ')[0];
+  const top = managers;
+  const sn = m => m.name.length > 10 ? m.name.split(' ')[0] : m.name;
   const hdr = `<th></th>`+top.map(m=>`<th title="${m.name}">${sn(m)}</th>`).join('');
   const rows = top.map(mA=>`<tr><th>${sn(mA)}</th>${top.map(mB=>{
     if(mA.ownerId===mB.ownerId) return `<td class="na">&mdash;</td>`;
@@ -814,7 +932,106 @@ function tabFun() {
     </div>`;
 }
 
-loadAll('1313934632156147712').catch(e => showSetup('1313934632156147712', `Failed to load: ${e.message}`));
+function tabPlayers() {
+  const {topScorers, topAvgScorers, mostTraded, userMap} = dashData;
+
+  const POS_COLORS = {
+    QB: ['#eeedfe','#3c3489'], RB: ['#e1f5ee','#085041'],
+    WR: ['#e6f1fb','#0c447c'], TE: ['#faeeda','#633806'],
+    K:  ['#f1efe8','#444441'], DEF:['#faece7','#712b13'],
+    DST:['#faece7','#712b13'],
+  };
+  function posChip(pos) {
+    const [bg,fg] = POS_COLORS[pos] || ['#f1efe8','#444441'];
+    return `<span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:8px;background:${bg};color:${fg};flex-shrink:0">${pos||'?'}</span>`;
+  }
+
+  function playerRow(p, i, valFn, subFn) {
+    return `<div class="lb-row">
+      <span class="rank ${i===0?'gold':i===1?'silver':''}">${i+1}</span>
+      ${posChip(p.pos)}
+      <span class="lname" style="font-weight:${i<3?'500':'400'}">${p.name}</span>
+      <span style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">${p.team||''}</span>
+      <div style="text-align:right;min-width:70px">
+        <div class="val">${valFn(p)}</div>
+        <div class="val-sub">${subFn(p)}</div>
+      </div>
+    </div>`;
+  }
+
+  const tradeRows = mostTraded.slice(0,20).map((p,i) => {
+    const details = p.details.slice(-3).reverse();
+    return `<div class="lb-row" style="flex-wrap:wrap;gap:6px">
+      <span class="rank ${i===0?'gold':i===1?'silver':''}">${i+1}</span>
+      ${posChip(p.pos)}
+      <span class="lname" style="font-weight:${i<3?'500':'400'}">${p.name}</span>
+      <span style="font-size:11px;color:var(--text3)">${p.team||''}</span>
+      <div style="margin-left:auto;text-align:right">
+        <div class="val">${p.count} trade${p.count!==1?'s':''}</div>
+        <div class="val-sub">${[...new Set(p.details.map(d=>d.season))].sort().join(', ')}</div>
+      </div>
+    </div>`;
+  });
+
+  const totalPlayerPts = topScorers.reduce((s,p)=>s+p.totalPts,0);
+  const uniquePlayers = topScorers.length;
+  const mostTradedCount = mostTraded[0]?.count || 0;
+
+  // Position breakdown of top 50 scorers
+  const posCounts = {};
+  for (const p of topScorers.slice(0,50)) posCounts[p.pos||'?'] = (posCounts[p.pos||'?']||0)+1;
+
+  return `
+    <div class="section-label" style="margin-top:0">Player overview</div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Unique players rostered</div><div class="metric-value">${uniquePlayers.toLocaleString()}</div><div class="metric-sub">with 2+ scored weeks</div></div>
+      <div class="metric"><div class="metric-label">Most traded player</div><div class="metric-value">${mostTraded[0]?.name.split(' ').pop()||'—'}</div><div class="metric-sub">${mostTradedCount} trade${mostTradedCount!==1?'s':''}</div></div>
+      <div class="metric"><div class="metric-label">Top scorer</div><div class="metric-value">${topScorers[0]?.name.split(' ').pop()||'—'}</div><div class="metric-sub">${Math.round(topScorers[0]?.totalPts||0)} pts total</div></div>
+      <div class="metric"><div class="metric-label">Top avg/week</div><div class="metric-value">${topAvgScorers[0]?.name.split(' ').pop()||'—'}</div><div class="metric-sub">${(topAvgScorers[0]?.avgPts||0).toFixed(1)} PPG</div></div>
+    </div>
+
+    <div class="section-label">Top scorers — all time total points</div>
+    <div class="card wide">
+      <p class="note">Total fantasy points scored while on any roster in this league, all seasons combined.</p>
+      ${topScorers.slice(0,25).map((p,i)=>playerRow(p, i,
+        p => `${Math.round(p.totalPts)} pts`,
+        p => `${p.weeks} wks &nbsp;·&nbsp; ${p.seasons.length} season${p.seasons.length!==1?'s':''}`
+      )).join('')}
+    </div>
+
+    <div class="section-label">Top scorers — average points per week</div>
+    <div class="card wide">
+      <p class="note">Minimum 4 scored weeks. Best week-to-week average while active in this league.</p>
+      ${topAvgScorers.slice(0,25).map((p,i)=>playerRow(p, i,
+        p => `${p.avgPts.toFixed(1)} PPW`,
+        p => `${Math.round(p.totalPts)} total &nbsp;·&nbsp; ${p.weeks} wks`
+      )).join('')}
+    </div>
+
+    <div class="section-label">Single best week — highest individual score</div>
+    <div class="card wide">
+      ${[...topScorers].sort((a,b)=>b.bestWeek-a.bestWeek).slice(0,15).map((p,i)=>playerRow(p, i,
+        p => `${p.bestWeek.toFixed(1)} pts`,
+        p => `${p.bestWeekCtx}`
+      )).join('')}
+    </div>
+
+    <div class="section-label">Most traded players</div>
+    <div class="card wide">
+      <p class="note">Players who changed hands the most via trades across all seasons.</p>
+      ${mostTraded.length === 0
+        ? `<p style="font-size:14px;color:var(--text2);padding:8px 0">No trade data found — this league may not have recorded trades through the API.</p>`
+        : tradeRows.join('')}
+    </div>`;
+}
+
+loadAll('1313934632156147712').catch(e => {
+  render(`<div style="padding:3rem 1rem;text-align:center">
+    <div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Could not load league data: ${e.message}</div>
+    <button class="primary" onclick="loadAll('1313934632156147712').catch(()=>{})">Retry</button>
+    <button style="margin-left:8px" onclick="showSetup('1313934632156147712')">Change league</button>
+  </div>`);
+});
 </script>
 </body>
 </html>
