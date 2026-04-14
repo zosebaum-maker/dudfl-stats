@@ -634,6 +634,77 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
 ::-webkit-scrollbar-track { background: var(--dark); }
 ::-webkit-scrollbar-thumb { background: var(--dark4); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+/* ── MOBILE ── */
+@media (max-width: 640px) {
+  .hero { height: 260px; }
+  .hero-title { font-size: 64px; }
+  .hero-rule { margin: 10px auto; }
+  .hero-sub { font-size: 10px; letter-spacing: 0.15em; }
+  .hero-eyebrow { font-size: 9px; margin-bottom: 8px; }
+
+  .app { padding: 0 0.75rem 3rem; }
+
+  .nav-logo { font-size: 15px; margin-right: 12px; }
+  .tab { font-size: 11px; padding: 13px 10px 11px; }
+
+  .section-label { font-size: 9px; margin-top: 1.25rem; margin-bottom: 8px; }
+
+  .metrics { grid-template-columns: repeat(2, 1fr); gap: 1px; }
+  .metric { padding: 12px; }
+  .metric-value { font-size: 24px; }
+
+  .cards { grid-template-columns: 1fr; gap: 1px; }
+
+  /* Overview standings table — simplify columns on mobile */
+  .standings-table { display: none; }
+  .standings-mobile { display: block; }
+
+  /* Leaderboard rows — shrink gaps */
+  .lb-row { gap: 6px; padding: 6px 0; }
+  .val { font-size: 14px; }
+
+  /* Record rows */
+  .record-val { font-size: 16px; }
+
+  /* H2H table — allow scroll */
+  .h2h-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .h2h-table th, .h2h-table td { padding: 5px 7px; font-size: 11px; }
+
+  /* Season cards */
+  .season-row { gap: 6px; }
+
+  /* Fun grid — single column */
+  .fun-grid { grid-template-columns: 1fr; }
+  .fun-card-wide { grid-column: 1; }
+
+  /* Champions grid — single column */
+  .champs-grid { grid-template-columns: 1fr !important; }
+
+  /* Card solo padding */
+  .card-solo { padding: 0.875rem 1rem; }
+  .card { padding: 0.875rem 1rem; }
+
+  /* Loading */
+  .loading-title { font-size: 36px; }
+
+  /* Setup */
+  .setup-card { padding: 1.5rem; }
+  .setup-logo { font-size: 36px; }
+
+  /* Lname — allow wrap on mobile instead of truncating */
+  .lname { white-space: normal; overflow: visible; text-overflow: unset; font-size: 12px; }
+
+  /* Section label no right rule on very small screens */
+  .section-label::after { display: none; }
+}
+
+@media (max-width: 400px) {
+  .hero { height: 220px; }
+  .hero-title { font-size: 52px; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .tab { font-size: 10px; padding: 12px 8px 10px; }
+}
 </style>
 </head>
 <body>
@@ -790,40 +861,31 @@ async function loadAll(startId) {
 
     const playoffStart = lg.settings?.playoff_week_start || 15;
     const regWeeks = Math.min(playoffStart - 1, 17);
-    const totalWeeks = lg.settings?.leg || 18; // fetch up to end of playoffs
 
-    const weekData = await Promise.all(
-      Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
-        fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
-          .then(d => ({w, d})).catch(() => ({w, d:[]}))
-      )
-    );
+    // Fetch matchups + transactions in one parallel batch
+    const [weekData, txnData] = await Promise.all([
+      Promise.all(
+        Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
+          fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
+            .then(d => ({w, d})).catch(() => ({w, d:[]}))
+        )
+      ),
+      Promise.all(
+        Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
+          fetchJ(`${API}/league/${lg.league_id}/transactions/${w}`)
+            .then(d => d).catch(() => [])
+        )
+      ),
+    ]);
+
     const matchupsByWeek = {};
     for (const {w, d} of weekData) matchupsByWeek[w] = d;
-
-    // Also fetch playoff weeks so we can get championship lineups
-    const playoffWeekData = await Promise.all(
-      Array.from({length: 4}, (_,i) => playoffStart + i).map(w =>
-        fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
-          .then(d => ({w, d})).catch(() => ({w, d:[]}))
-      )
-    );
-    const playoffMatchupsByWeek = {};
-    for (const {w, d} of playoffWeekData) playoffMatchupsByWeek[w] = d;
+    const transactions = txnData.flat();
 
     let bracket = [];
     try { bracket = await fetchJ(`${API}/league/${lg.league_id}/winners_bracket`); } catch {}
 
-    // Fetch transactions for trade data (all weeks)
-    const txnData = await Promise.all(
-      Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
-        fetchJ(`${API}/league/${lg.league_id}/transactions/${w}`)
-          .then(d => d).catch(() => [])
-      )
-    );
-    const transactions = txnData.flat();
-
-    allData.push({ lg, users, rosters, matchupsByWeek, playoffMatchupsByWeek, playoffStart, bracket, transactions });
+    allData.push({ lg, users, rosters, matchupsByWeek, transactions, bracket });
   }
 
   showLoading('Loading NFL player names...', 85);
@@ -854,34 +916,21 @@ async function loadAll(startId) {
   showLoading('Computing stats...', 95);
   await new Promise(r => setTimeout(r, 30));
   dashData = computeStats(allData, leagueName, playerMap);
-
-  // Fetch season-specific team data for each champion roster
-  if (dashData.champRosters.length) {
-    showLoading('Loading champion roster details...', 97);
-    for (const cr of dashData.champRosters) {
-      // Fetch week 14 first (close to playoffs), then fill gaps with week 1
-      for (const wk of [14, 1]) {
-        try {
-          const stats = await fetchJ(`${API}/stats/nfl/regular/${cr.season}/${wk}`);
-          for (const [pid, s] of Object.entries(stats || {})) {
-            if (s?.team && !cr.seasonTeamMap[pid]) cr.seasonTeamMap[pid] = s.team;
-          }
-        } catch {}
-      }
-    }
-  }
-
   renderDashboard();
 }
 
 function computeStats(allData, leagueName, playerMap={}) {
   const userMap = {};
+  const avatarMap = {};
   const ownershipHistory = {};
   const ownershipChanges = [];
 
   for (const {lg, users, rosters} of allData) {
     for (const u of users) {
-      if (u.user_id) userMap[u.user_id] = u.display_name || u.metadata?.team_name || u.username || u.user_id;
+      if (u.user_id) {
+        userMap[u.user_id] = u.display_name || u.metadata?.team_name || u.username || u.user_id;
+        if (u.avatar) avatarMap[u.user_id] = u.avatar;
+      }
     }
     for (const r of rosters) {
       if (!r.owner_id) continue;
@@ -919,7 +968,7 @@ function computeStats(allData, leagueName, playerMap={}) {
   const seasonSummaries = [];
   const champRosters = [];
 
-  for (const {lg, rosters, matchupsByWeek, playoffMatchupsByWeek, bracket} of allData) {
+  for (const {lg, rosters, matchupsByWeek, bracket} of allData) {
     const rto = {};
     for (const r of rosters) { if (r.owner_id) rto[r.roster_id] = r.owner_id; }
     const seasonOwners = new Set(Object.values(rto));
@@ -969,12 +1018,22 @@ function computeStats(allData, leagueName, playerMap={}) {
         const champOwnerId = rto[champGame.w];
         const hasGames = allMatchups.some(m => m.season === lg.season);
         if (champRoster && champOwnerId && hasGames) {
+          // Tally each starter's total points this season from matchup data
+          const starterPts = {};
+          for (const weekMatchups of Object.values(matchupsByWeek)) {
+            const mu = (weekMatchups||[]).find(m => m.roster_id === champGame.w);
+            if (!mu?.players_points) continue;
+            for (const [pid, pts] of Object.entries(mu.players_points)) {
+              if (pts > 0) starterPts[pid] = (starterPts[pid]||0) + pts;
+            }
+          }
           champRosters.push({
             season: lg.season,
             ownerName: userMap[champOwnerId] || champOwnerId,
+            ownerAvatar: avatarMap[champOwnerId] || null,
             players: champRoster.players || [],
             starters: champRoster.starters || [],
-            seasonTeamMap: {}, // filled in below after computeStats
+            starterPts,
           });
         }
       }
@@ -1012,19 +1071,14 @@ function computeStats(allData, leagueName, playerMap={}) {
   const avgScore = allMatchups.reduce((s,m)=>s+m.sA+m.sB,0)/(totalGames*2||1);
 
   // --- Player stats across all seasons ---
-  // playerPoints: playerId -> {totalPts, weeks, owners: Set, seasons: Set, bestWeek, bestWeekCtx}
   const playerPoints = {};
-  // tradeCounts: playerId -> number of times traded
-  const tradeCounts = {};
-  // tradeDetails: playerId -> [{season, fromOwner, toOwner}]
-  const tradeDetails = {};
-  const allTrades = [];
+  const tradeCounts = {};   // pid -> count
+  const waiverCuts = {};    // pid -> count
 
-  for (const {lg, matchupsByWeek, transactions, rosters} of allData) {
+  for (const {lg, matchupsByWeek, rosters, transactions} of allData) {
     const rto = {};
     for (const r of rosters) { if (r.owner_id) rto[r.roster_id] = r.owner_id; }
 
-    // Tally player points from matchup players_points
     for (const [wStr, matchups] of Object.entries(matchupsByWeek)) {
       const week = parseInt(wStr);
       for (const mu of (matchups||[])) {
@@ -1043,62 +1097,26 @@ function computeStats(allData, leagueName, playerMap={}) {
       }
     }
 
-    // Tally trades from transactions — deduplicate by transaction_id
-    const seenTxnIds = new Set();
+    // Count trades and waiver cuts from transactions
+    const seenTxn = new Set();
     for (const txn of (transactions||[])) {
-      if (txn.type !== 'trade') continue;
-      if (txn.status !== 'complete') continue; // only count completed trades
-      if (txn.transaction_id && seenTxnIds.has(txn.transaction_id)) continue;
-      if (txn.transaction_id) seenTxnIds.add(txn.transaction_id);
-      const adds = txn.adds || {};
-      const drops = txn.drops || {};
-      const rosterIds = [...new Set([...Object.values(adds), ...Object.values(drops)])];
-      const involvedOwners = rosterIds.map(rid => rto[rid]).filter(Boolean);
-      const seasonUsers = allData.find(d=>d.lg.league_id===lg.league_id)?.users || [];
-      const ownerName = oid => seasonUsers.find(u=>u.user_id===oid)?.display_name || userMap[oid] || oid;
+      if (txn.status !== 'complete') continue;
+      if (txn.transaction_id && seenTxn.has(txn.transaction_id)) continue;
+      if (txn.transaction_id) seenTxn.add(txn.transaction_id);
 
-      // Build per-side player lists
-      const sides = {};
-      for (const [pid, toRosterId] of Object.entries(adds)) {
-        const toOwner = rto[toRosterId];
-        if (!toOwner) continue;
-        if (!sides[toOwner]) sides[toOwner] = {received:[], sent:[]};
-        sides[toOwner].received.push(pid);
-        const fromRosterId = Object.entries(drops).find(([p]) => p === pid)?.[1];
-        const fromOwner = fromRosterId ? rto[fromRosterId] : null;
-        if (fromOwner) {
-          if (!sides[fromOwner]) sides[fromOwner] = {received:[], sent:[]};
-          sides[fromOwner].sent.push(pid);
+      if (txn.type === 'trade') {
+        for (const pid of Object.keys(txn.adds || {})) {
+          tradeCounts[pid] = (tradeCounts[pid]||0) + 1;
         }
-        // Per-player trade tracking
-        tradeCounts[pid] = (tradeCounts[pid]||0) + 1;
-        if (!tradeDetails[pid]) tradeDetails[pid] = [];
-        tradeDetails[pid].push({
-          season: lg.season,
-          toOwner: ownerName(toOwner),
-          fromOwner: fromOwner ? ownerName(fromOwner) : '?',
-        });
-      }
-
-      // Store full trade record
-      const tradeParties = Object.entries(sides).map(([oid, {received, sent}]) => ({
-        ownerId: oid,
-        ownerName: ownerName(oid),
-        received,
-        sent,
-      }));
-      if (tradeParties.length >= 2) {
-        allTrades.push({
-          season: lg.season,
-          week: txn.leg || 0,
-          parties: tradeParties,
-          txnId: txn.transaction_id,
-        });
+      } else if (txn.type === 'waiver' || txn.type === 'free_agent') {
+        // drops in non-trade = cut/released
+        for (const pid of Object.keys(txn.drops || {})) {
+          waiverCuts[pid] = (waiverCuts[pid]||0) + 1;
+        }
       }
     }
   }
 
-  // Build sorted player leaderboards
   const topScorers = Object.entries(playerPoints)
     .map(([pid, s]) => ({
       pid,
@@ -1120,16 +1138,25 @@ function computeStats(allData, leagueName, playerMap={}) {
 
   const mostTraded = Object.entries(tradeCounts)
     .map(([pid, count]) => ({
-      pid,
+      pid, count,
       name: playerMap[pid]?.name || `Player ${pid}`,
       pos: playerMap[pid]?.pos || '',
       team: playerMap[pid]?.team || '',
-      count,
-      details: tradeDetails[pid] || [],
     }))
-    .sort((a,b) => b.count - a.count);
+    .sort((a,b) => b.count - a.count)
+    .slice(0, 25);
 
-  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,playerMap,allTrades,champRosters};
+  const mostCut = Object.entries(waiverCuts)
+    .map(([pid, count]) => ({
+      pid, count,
+      name: playerMap[pid]?.name || `Player ${pid}`,
+      pos: playerMap[pid]?.pos || '',
+      team: playerMap[pid]?.team || '',
+    }))
+    .sort((a,b) => b.count - a.count)
+    .slice(0, 25);
+
+  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,mostCut,playerMap,champRosters};
 }
 
 function renderDashboard() {
@@ -1226,30 +1253,23 @@ function tabOverview() {
 
     <div class="section-label">All-time standings</div>
     <div class="card-solo">
-      <div style="display:grid;grid-template-columns:20px 34px 1fr 80px 120px 72px;gap:0;align-items:center;padding:0 0 8px;border-bottom:1px solid var(--border);margin-bottom:2px">
+      <div style="display:grid;grid-template-columns:24px 32px 1fr auto auto;gap:0;align-items:center;padding:0 0 8px;border-bottom:1px solid var(--border);margin-bottom:2px">
         <span></span><span></span>
-        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;padding-left:4px">Manager</span>
-        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;text-align:right">Record</span>
-        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;padding:0 12px">Win rate</span>
-        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;text-align:right">PPG</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;padding-left:8px">Manager</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;text-align:right;padding-right:8px">W–L</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;text-align:right;min-width:48px">PPG</span>
       </div>
       ${managers.map((m,i)=>{
         const g=m.wins+m.losses||1, wr=m.wins/g;
         const ppg = m.pf/g;
         const champ=m.championships>0?`<span class="champ-badge">${m.championships}× champ</span>`:'';
         const rankSymbol = i===0?'①':i===1?'②':i===2?'③':`${i+1}`;
-        return `<div style="display:grid;grid-template-columns:20px 34px 1fr 80px 120px 72px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+        return `<div style="display:grid;grid-template-columns:24px 32px 1fr auto auto;gap:0;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
           <span class="rank ${i===0?'gold':i===1?'silver':''}" style="font-size:13px">${rankSymbol}</span>
-          ${av(m.name,m.ownerId,28)}
-          <span style="font-size:13px;font-weight:500;color:var(--text);padding-left:10px;display:flex;align-items:center;gap:6px;overflow:hidden">${m.name}${champ}</span>
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:right">${m.wins}–${m.losses}</span>
-          <div style="padding:0 12px">
-            <div style="height:3px;background:var(--dark4);border-radius:2px;overflow:hidden">
-              <div style="height:3px;width:${(wr/maxWR*100).toFixed(0)}%;background:${i===0?'var(--gold)':'var(--text3)'};border-radius:2px;opacity:${i===0?1:0.6}"></div>
-            </div>
-            <div style="font-family:var(--font-mono);font-size:10px;color:${i===0?'var(--gold)':'var(--text3)'};margin-top:3px">${(wr*100).toFixed(1)}%</div>
-          </div>
-          <span style="font-family:var(--font-display);font-size:18px;font-weight:700;color:${i===0?'var(--gold)':'var(--text)'};text-align:right">${ppg.toFixed(1)}</span>
+          ${av(m.name,m.ownerId,26)}
+          <span style="font-size:13px;font-weight:500;color:var(--text);padding-left:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0">${m.name}${champ}</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:right;padding:0 8px;white-space:nowrap">${m.wins}–${m.losses}&nbsp;<span style="color:${i===0?'var(--gold)':'var(--text3)'};font-size:10px">${(wr*100).toFixed(0)}%</span></span>
+          <span style="font-family:var(--font-display);font-size:18px;font-weight:700;color:${i===0?'var(--gold)':'var(--text)'};text-align:right;min-width:48px">${ppg.toFixed(1)}</span>
         </div>`;
       }).join('')}
     </div>`;
@@ -1354,7 +1374,7 @@ function tabSeasons() {
           return `<div class="season-row">
             <span class="rank ${i===0?'gold':i===1?'silver':''}" style="min-width:24px;font-size:14px">${sym}</span>
             ${av(m.name,m.oid,26)}
-            <span style="font-size:13px;font-weight:500;min-width:110px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:8px;color:${i===0?'var(--text)':'var(--text2)'}">${m.name}</span>
+            <span style="font-size:13px;font-weight:500;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:8px;color:${i===0?'var(--text)':'var(--text2)'}">${m.name}</span>
             <div class="bar-wrap"><div class="bar-fill" style="width:${((m.wins/maxW)*100).toFixed(0)}%;background:${i===0?'var(--gold)':fg};opacity:${i===0?0.85:0.4}"></div></div>
             <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);min-width:48px;text-align:right">${m.wins}&ndash;${m.losses}</span>
             <span style="font-family:var(--font-display);font-size:17px;font-weight:700;min-width:68px;text-align:right;color:${i===0?'var(--gold)':'var(--text2)'}">${fmtInt(m.pf)}</span>
@@ -1562,7 +1582,7 @@ function tabFun() {
 }
 
 function tabPlayers() {
-  const {topScorers, topAvgScorers, mostTraded, userMap} = dashData;
+  const {topScorers, topAvgScorers, mostTraded, mostCut} = dashData;
 
   const POS_COLORS = {
     QB: ['#3d1f6e','#c4b5fd'], RB: ['#0d3d2e','#6ee7b7'],
@@ -1574,7 +1594,6 @@ function tabPlayers() {
     const [bg,fg] = POS_COLORS[pos] || ['#1e1e2e','#9ca3af'];
     return `<span class="pos-chip" style="background:${bg};color:${fg}">${pos||'?'}</span>`;
   }
-
   function playerRow(p, i, valFn, subFn) {
     return `<div class="lb-row">
       <span class="rank ${i===0?'gold':i===1?'silver':''}">${i+1}</span>
@@ -1587,71 +1606,71 @@ function tabPlayers() {
       </div>
     </div>`;
   }
-
-  const tradeRows = mostTraded.slice(0,20).map((p,i) => {
-    const details = p.details.slice(-3).reverse();
-    return `<div class="lb-row" style="flex-wrap:wrap;gap:6px">
+  function txnRow(p, i, label) {
+    return `<div class="lb-row">
       <span class="rank ${i===0?'gold':i===1?'silver':''}">${i+1}</span>
       ${posChip(p.pos)}
       <span class="lname" style="font-weight:${i<3?'500':'400'}">${p.name}</span>
-      <span style="font-size:11px;color:var(--text3)">${p.team||''}</span>
-      <div style="margin-left:auto;text-align:right">
-        <div class="val">${p.count} trade${p.count!==1?'s':''}</div>
-        <div class="val-sub">${[...new Set(p.details.map(d=>d.season))].sort().join(', ')}</div>
+      <span style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">${p.team||''}</span>
+      <div style="text-align:right;min-width:80px">
+        <div class="val">${p.count}</div>
+        <div class="val-sub">${label}</div>
       </div>
     </div>`;
-  });
+  }
 
-  const totalPlayerPts = topScorers.reduce((s,p)=>s+p.totalPts,0);
-  const uniquePlayers = topScorers.length;
-  const mostTradedCount = mostTraded[0]?.count || 0;
-
-  // Position breakdown of top 50 scorers
-  const posCounts = {};
-  for (const p of topScorers.slice(0,50)) posCounts[p.pos||'?'] = (posCounts[p.pos||'?']||0)+1;
+  const bestSingle = [...topScorers].sort((a,b)=>b.bestWeek-a.bestWeek)[0];
 
   return `
     <div class="section-label">Player overview</div>
     <div class="metrics">
-      <div class="metric"><div class="metric-label">Unique players rostered</div><div class="metric-value">${uniquePlayers.toLocaleString()}</div><div class="metric-sub">with 2+ scored weeks</div></div>
-      <div class="metric"><div class="metric-label">Most traded player</div><div class="metric-value">${mostTraded[0]?.name.split(' ').pop()||'—'}</div><div class="metric-sub">${mostTradedCount} trade${mostTradedCount!==1?'s':''}</div></div>
+      <div class="metric"><div class="metric-label">Unique players</div><div class="metric-value">${topScorers.length.toLocaleString()}</div><div class="metric-sub">with 2+ scored weeks</div></div>
       <div class="metric"><div class="metric-label">Top scorer</div><div class="metric-value">${topScorers[0]?.name.split(' ').pop()||'—'}</div><div class="metric-sub">${Math.round(topScorers[0]?.totalPts||0)} pts total</div></div>
       <div class="metric"><div class="metric-label">Top avg/week</div><div class="metric-value">${topAvgScorers[0]?.name.split(' ').pop()||'—'}</div><div class="metric-sub">${(topAvgScorers[0]?.avgPts||0).toFixed(1)} PPG</div></div>
+      <div class="metric"><div class="metric-label">Best single week</div><div class="metric-value">${(bestSingle?.bestWeek||0).toFixed(1)}</div><div class="metric-sub">${bestSingle?.name.split(' ').pop()||'—'}</div></div>
+      ${mostTraded[0] ? `<div class="metric"><div class="metric-label">Most traded</div><div class="metric-value">${mostTraded[0].name.split(' ').pop()}</div><div class="metric-sub">${mostTraded[0].count}× traded</div></div>` : ''}
+      ${mostCut[0] ? `<div class="metric"><div class="metric-label">Most cut</div><div class="metric-value">${mostCut[0].name.split(' ').pop()}</div><div class="metric-sub">${mostCut[0].count}× dropped</div></div>` : ''}
     </div>
 
-    <div class="section-label">Top scorers — all time total points</div>
+    <div class="section-label">Top scorers — total points</div>
     <div class="card-solo">
       <p class="note">Total fantasy points scored while on any roster in this league, all seasons combined.</p>
-      ${topScorers.slice(0,25).map((p,i)=>playerRow(p, i,
-        p => `${Math.round(p.totalPts)} pts`,
-        p => `${p.weeks} wks &nbsp;·&nbsp; ${p.seasons.length} season${p.seasons.length!==1?'s':''}`
+      ${topScorers.slice(0,25).map((p,i)=>playerRow(p,i,
+        p=>`${Math.round(p.totalPts)} pts`,
+        p=>`${p.weeks} wks · ${p.seasons.length} season${p.seasons.length!==1?'s':''}`
       )).join('')}
     </div>
 
-    <div class="section-label">Top scorers — average points per week</div>
+    <div class="section-label">Top scorers — average per week</div>
     <div class="card-solo">
-      <p class="note">Minimum 4 scored weeks. Best week-to-week average while active in this league.</p>
-      ${topAvgScorers.slice(0,25).map((p,i)=>playerRow(p, i,
-        p => `${p.avgPts.toFixed(1)} PPW`,
-        p => `${Math.round(p.totalPts)} total &nbsp;·&nbsp; ${p.weeks} wks`
+      <p class="note">Minimum 4 scored weeks.</p>
+      ${topAvgScorers.slice(0,25).map((p,i)=>playerRow(p,i,
+        p=>`${p.avgPts.toFixed(1)} PPW`,
+        p=>`${Math.round(p.totalPts)} total · ${p.weeks} wks`
       )).join('')}
     </div>
 
-    <div class="section-label">Single best week — highest individual score</div>
+    <div class="section-label">Single best week</div>
     <div class="card-solo">
-      ${[...topScorers].sort((a,b)=>b.bestWeek-a.bestWeek).slice(0,15).map((p,i)=>playerRow(p, i,
-        p => `${p.bestWeek.toFixed(1)} pts`,
-        p => `${p.bestWeekCtx}`
+      ${[...topScorers].sort((a,b)=>b.bestWeek-a.bestWeek).slice(0,15).map((p,i)=>playerRow(p,i,
+        p=>`${p.bestWeek.toFixed(1)} pts`,
+        p=>p.bestWeekCtx
       )).join('')}
     </div>
 
+    ${mostTraded.length ? `
     <div class="section-label">Most traded players</div>
     <div class="card-solo">
       <p class="note">Players who changed hands the most via trades across all seasons.</p>
-      ${mostTraded.length === 0
-        ? `<p style="font-size:14px;color:var(--text2);padding:8px 0">No trade data found — this league may not have recorded trades through the API.</p>`
-        : tradeRows.join('')}
-    </div>`;
+      ${mostTraded.slice(0,15).map((p,i) => txnRow(p, i, `trade${p.count!==1?'s':''}`)).join('')}
+    </div>` : ''}
+
+    ${mostCut.length ? `
+    <div class="section-label">Most cut players</div>
+    <div class="card-solo">
+      <p class="note">Players dropped via waiver or free agent release the most times.</p>
+      ${mostCut.slice(0,15).map((p,i) => txnRow(p, i, `drop${p.count!==1?'s':''}`)).join('')}
+    </div>` : ''}`;
 }
 function tabChampions() {
   const {champRosters, playerMap} = dashData;
@@ -1677,27 +1696,65 @@ function tabChampions() {
 
   return `
     <div class="section-label">Championship rosters by year</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:2px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden" class="champs-grid">
       ${sorted.map(c => {
-        // Show starters first, then bench — dedupe
-        const starterSet = new Set(c.starters);
+        const avatarUrl = c.ownerAvatar
+          ? `https://sleepercdn.com/avatars/thumbs/${c.ownerAvatar}`
+          : null;
+
+        // Find top scoring starter for the headshot
+        const pts = c.starterPts || {};
+        const topPid = c.starters.length
+          ? c.starters.reduce((best, pid) => (pts[pid]||0) > (pts[best]||0) ? pid : best, c.starters[0])
+          : null;
+        const topPlayer = topPid ? (playerMap[topPid] || {}) : {};
+        const topPts = topPid ? (pts[topPid] || 0) : 0;
+        const headshot = topPid
+          ? `https://sleepercdn.com/content/nfl/players/thumb/${topPid}.jpg`
+          : null;
 
         return `<div style="background:var(--dark2);padding:1.25rem 1.5rem">
-          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-            <span style="font-family:var(--font-display);font-size:28px;font-weight:900;font-style:italic;color:var(--gold);letter-spacing:0.04em">${c.season}</span>
-            <span style="font-size:14px;font-weight:600;color:var(--text)">${c.ownerName}</span>
-            <span style="font-family:var(--font-mono);font-size:9px;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;background:var(--gold-dim);padding:2px 6px;border-radius:3px;border:1px solid rgba(240,180,41,0.25)">CHAMP</span>
+
+          <!-- Owner header -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+            ${avatarUrl
+              ? `<img src="${avatarUrl}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);flex-shrink:0" onerror="this.style.display='none'" />`
+              : `<div style="width:44px;height:44px;border-radius:50%;background:var(--gold-dim);border:2px solid rgba(240,180,41,0.3);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:18px;font-weight:800;color:var(--gold);flex-shrink:0">${c.ownerName[0]?.toUpperCase()}</div>`
+            }
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="font-family:var(--font-display);font-size:20px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:0.02em">${c.ownerName}</span>
+                <span style="font-family:var(--font-mono);font-size:9px;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;background:var(--gold-dim);padding:2px 6px;border-radius:3px;border:1px solid rgba(240,180,41,0.25)">CHAMP</span>
+              </div>
+              <span style="font-family:var(--font-display);font-size:16px;font-weight:700;font-style:italic;color:var(--gold)">${c.season}</span>
+            </div>
           </div>
 
+          <!-- Top scorer spotlight -->
+          ${headshot && topPlayer.name ? `
+          <div style="display:flex;align-items:center;gap:12px;background:var(--dark3);border-radius:var(--radius-lg);padding:10px 12px;margin-bottom:14px;border:1px solid rgba(240,180,41,0.15)">
+            <img src="${headshot}"
+              style="width:64px;height:64px;border-radius:var(--radius);object-fit:cover;object-position:top;flex-shrink:0;background:var(--dark4)"
+              onerror="this.src='';this.style.display='none'" />
+            <div>
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px">Season top scorer</div>
+              <div style="font-family:var(--font-display);font-size:18px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:0.02em;line-height:1">${topPlayer.name}</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-top:4px">${topPts.toFixed(1)} pts &nbsp;·&nbsp; ${topPlayer.pos||''} &nbsp;·&nbsp; ${topPlayer.team||''}</div>
+            </div>
+          </div>` : ''}
+
+          <!-- Starters list -->
           ${c.starters.length ? `
           <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:8px">Starters</div>
           ${c.starters.map(pid => {
             const p = playerMap[pid] || {};
-            const team = c.seasonTeamMap[pid] || '';
+            const team = c.seasonTeamMap?.[pid] || p.team || '';
+            const isTop = pid === topPid;
             return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
               ${posChip(p.pos||'')}
-              <span style="font-size:13px;color:var(--text);flex:1">${p.name || pid}</span>
+              <span style="font-size:13px;color:${isTop?'var(--gold)':'var(--text)'};flex:1;font-weight:${isTop?'600':'400'}">${p.name || pid}</span>
               <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">${team}</span>
+              ${pts[pid] ? `<span style="font-family:var(--font-display);font-size:15px;font-weight:700;color:${isTop?'var(--gold)':'var(--text3)'};min-width:42px;text-align:right">${pts[pid].toFixed(1)}</span>` : ''}
             </div>`;
           }).join('')}` : ''}
         </div>`;
