@@ -2360,21 +2360,20 @@ function renderBianchiLaw(salData) {
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
       ${posChipS(c.pos)}
       <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
-          <span style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">${c.n}</span>
+        <div style="display:flex;align-items:center;gap:5px;min-width:0">
+          <span style="font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1">${c.n}</span>
           ${c.posRank ? posRankBadge(c.posRank) : ''}
         </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
           ${valueBar(c)}
-          <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);white-space:nowrap">${c.ppw.toFixed(1)} PPW · ${c.weeks}gp</span>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);margin-top:2px;white-space:nowrap">
+          $${c.s} &middot; exp ${c.expectedPPW.toFixed(1)} &middot; got ${c.ppw.toFixed(1)} &middot; ${c.weeks}gp
         </div>
       </div>
-      <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+      <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:6px">
         ${valueLabel(c)}
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">$${c.s} · exp ${c.expectedPPW.toFixed(1)} · got ${c.ppw.toFixed(1)}</span>
-          <span style="font-family:var(--font-display);font-size:15px;font-weight:800;color:${deltaColor}">${deltaStr}</span>
-        </div>
+        <span style="font-family:var(--font-display);font-size:16px;font-weight:800;color:${deltaColor};line-height:1">${deltaStr}</span>
       </div>
     </div>`;
   }
