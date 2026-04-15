@@ -3,9 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#08080d">
 <title>Sleeper All-Time Stats</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="dns-prefetch" href="https://api.sleeper.app">
+<link rel="dns-prefetch" href="https://sleepercdn.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"></noscript>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -316,9 +320,8 @@ body {
   font-size: 13px;
   font-weight: 500;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  word-break: break-word;
   color: var(--text);
 }
 .val {
@@ -442,7 +445,7 @@ body {
   letter-spacing: 0.02em;
 }
 .fun-stat { font-family: var(--font-mono); font-size: 11px; color: var(--text2); }
-.fun-flavor { font-size: 12px; color: var(--text3); line-height: 1.5; }
+.fun-flavor { font-size: 12px; color: var(--text3); line-height: 1.5; word-break: break-word; }
 
 /* ── LOADING ── */
 .loading {
@@ -632,6 +635,8 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
   display: inline-flex; align-items: center;
   font-size: 12px; color: var(--text2);
   padding: 2px 0;
+  word-break: break-word;
+  min-width: 0;
 }
 .trade-arrow {
   font-size: 18px; color: var(--text3);
@@ -694,6 +699,14 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
   .card-solo { padding: 0.875rem 1rem; }
   .card { padding: 0.875rem 1rem; }
 
+  /* Prevent grid columns from overflowing on narrow screens */
+  [style*="grid-template-columns:24px 32px 1fr auto auto"] {
+    grid-template-columns: 20px 26px 1fr auto !important;
+  }
+  /* Allow W-L to wrap on very small screens */
+  .val { font-size: 13px; }
+  .val-sub { font-size: 9px; }
+
   /* Loading */
   .loading-title { font-size: 36px; }
 
@@ -701,8 +714,8 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
   .setup-card { padding: 1.5rem; }
   .setup-logo { font-size: 36px; }
 
-  /* Lname — allow wrap on mobile instead of truncating */
-  .lname { white-space: normal; overflow: visible; text-overflow: unset; font-size: 12px; }
+  /* Lname — smaller font on mobile */
+  .lname { font-size: 12px; }
 
   /* Section label no right rule on very small screens */
   .section-label::after { display: none; }
@@ -714,6 +727,127 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
   .metrics { grid-template-columns: 1fr 1fr; }
   .tab { font-size: 10px; padding: 12px 8px 10px; }
 }
+
+/* ── REDZONE TICKER ── */
+#rz-ticker {
+  width: 100%;
+  background: #c8102e;
+  border-top: 2px solid #ff1f3d;
+  border-bottom: 2px solid #8b0000;
+  height: 34px;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 2px 16px rgba(200,16,46,0.35), inset 0 1px 0 rgba(255,80,100,0.25);
+}
+#rz-ticker::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 2;
+}
+.rz-label {
+  flex-shrink: 0;
+  background: #08080d;
+  color: #c8102e;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 14px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 3;
+  border-right: 2px solid #c8102e;
+  white-space: nowrap;
+  position: relative;
+}
+.rz-label::after {
+  content: '';
+  position: absolute;
+  right: -10px;
+  top: 0; bottom: 0;
+  width: 10px;
+  background: #08080d;
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+.rz-dot {
+  width: 7px; height: 7px;
+  background: #c8102e;
+  border-radius: 50%;
+  animation: rz-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes rz-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+.rz-track-wrap {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  position: relative;
+  mask-image: linear-gradient(to right, transparent 0%, black 2%, black 96%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2%, black 96%, transparent 100%);
+}
+.rz-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+  animation: rz-scroll 60s linear infinite;
+  will-change: transform;
+}
+.rz-track:hover { animation-play-state: paused; }
+@keyframes rz-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.rz-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 20px 0 0;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.95);
+  letter-spacing: 0.01em;
+  cursor: default;
+}
+.rz-item-sep {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(255,255,255,0.3);
+  font-size: 10px;
+  padding: 0 14px 0 0;
+  flex-shrink: 0;
+}
+.rz-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.rz-tag-trade    { background: rgba(0,0,0,0.35); color: #ffd166; border: 1px solid rgba(255,209,102,0.35); }
+.rz-tag-waiver   { background: rgba(0,0,0,0.35); color: #93c5fd; border: 1px solid rgba(147,197,253,0.35); }
+.rz-tag-block    { background: rgba(0,0,0,0.35); color: #fb923c; border: 1px solid rgba(251,146,60,0.35); }
+.rz-tag-champ    { background: rgba(0,0,0,0.35); color: #ffd700; border: 1px solid rgba(255,215,0,0.4); }
+.rz-tag-standing { background: rgba(0,0,0,0.35); color: #86efac; border: 1px solid rgba(134,239,172,0.35); }
+.rz-tag-drop     { background: rgba(0,0,0,0.35); color: #fca5a5; border: 1px solid rgba(252,165,165,0.35); }
+.rz-strong { font-weight: 700; color: #fff; }
+.rz-dim    { color: rgba(255,255,255,0.55); font-size: 10.5px; }
 </style>
 </head>
 <body>
@@ -764,9 +898,17 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
     <div class="hero-rule"></div>
     <div class="hero-sub">All-Time Stats &nbsp;&mdash;&nbsp; Every Season &nbsp;&mdash;&nbsp; Every Matchup</div>
   </div>
-  <div class="hero-scroll-hint">Scroll to explore</div>
+  <div class="hero-scroll-hint">Metro Detroit's Finest Suckers and Fuckers</div>
 </div>
 
+<div id="rz-ticker">
+  <div class="rz-label"><div class="rz-dot"></div>LIVE</div>
+  <div class="rz-track-wrap">
+    <div class="rz-track" id="rz-track">
+      <span class="rz-item"><span class="rz-tag rz-tag-champ">🏆 Champ</span><span class="rz-dim">Loading league data…</span></span>
+    </div>
+  </div>
+</div>
 <div class="app" id="app"></div>
 <script>
 const API = 'https://api.sleeper.app/v1';
@@ -863,28 +1005,22 @@ async function loadAll(startId) {
     const pct = 10 + Math.round((i/leagues.length)*70);
     showLoading(`Loading ${lg.season} (${i+1}/${leagues.length})...`, pct);
 
-    const [users, rosters] = await Promise.all([
-      fetchJ(`${API}/league/${lg.league_id}/users`),
-      fetchJ(`${API}/league/${lg.league_id}/rosters`),
-    ]);
-
     const playoffStart = lg.settings?.playoff_week_start || 15;
     const regWeeks = Math.min(playoffStart - 1, 17);
+    const weeks = Array.from({length: regWeeks}, (_,i) => i+1);
 
-    // Fetch matchups + transactions in one parallel batch
-    const [weekData, txnData] = await Promise.all([
-      Promise.all(
-        Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
-          fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
-            .then(d => ({w, d})).catch(() => ({w, d:[]}))
-        )
-      ),
-      Promise.all(
-        Array.from({length: regWeeks}, (_,i) => i+1).map(w =>
-          fetchJ(`${API}/league/${lg.league_id}/transactions/${w}`)
-            .then(d => d).catch(() => [])
-        )
-      ),
+    // Fetch everything for this season in one parallel batch
+    const [users, rosters, weekData, txnData] = await Promise.all([
+      fetchJ(`${API}/league/${lg.league_id}/users`),
+      fetchJ(`${API}/league/${lg.league_id}/rosters`),
+      Promise.all(weeks.map(w =>
+        fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
+          .then(d => ({w, d})).catch(() => ({w, d:[]}))
+      )),
+      Promise.all(weeks.map(w =>
+        fetchJ(`${API}/league/${lg.league_id}/transactions/${w}`)
+          .then(d => d).catch(() => [])
+      )),
     ]);
 
     const matchupsByWeek = {};
@@ -916,7 +1052,7 @@ async function loadAll(startId) {
           };
         }
       }
-      try { sessionStorage.setItem(cacheKey, JSON.stringify(playerMap)); } catch {}
+      try { localStorage.setItem(cacheKey, JSON.stringify(playerMap)); } catch {}
     }
   } catch(e) {
     console.warn('Player names unavailable, continuing without them:', e);
@@ -925,6 +1061,7 @@ async function loadAll(startId) {
   showLoading('Computing stats...', 95);
   await new Promise(r => setTimeout(r, 30));
   dashData = computeStats(allData, leagueName, playerMap);
+  dashData._leagueId = startId;
   renderDashboard();
 }
 
@@ -1179,7 +1316,17 @@ function computeStats(allData, leagueName, playerMap={}) {
     .sort((a,b) => b.count - a.count)
     .slice(0, 25);
 
-  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,mostCut,playerMap,champRosters,playerPoints2024,lastSeason};
+  // Collect raw transactions from most recent season for ticker
+  const latestSeasonData = allData[allData.length - 1];
+  const recentRawTxns = (latestSeasonData?.transactions || [])
+    .filter(t => t.status === 'complete')
+    .sort((a,b) => (b.status_updated||0) - (a.status_updated||0));
+  const latestRosterOwner = {};
+  for (const r of (latestSeasonData?.rosters || [])) {
+    if (r.owner_id) latestRosterOwner[r.roster_id] = r.owner_id;
+  }
+
+  return {leagueName,managers,ownershipChanges,seasonSummaries,allMatchups,userMap,avatarMap,totalGames,avgScore,seasons,highGame,lowGame,closestGame,blowout,badLuck,topScorers,topAvgScorers,mostTraded,mostCut,playerMap,champRosters,playerPoints2024,lastSeason,recentRawTxns,latestRosterOwner};
 }
 
 function renderDashboard() {
@@ -1188,13 +1335,15 @@ function renderDashboard() {
   const tabs = ['overview','leaderboards','records','head-to-head','seasons','ownership','fun','players','champions','salaries'];
   const tabLabels = {overview:'Overview',leaderboards:'Leaderboards',records:'Records','head-to-head':'H2H',seasons:'Seasons',ownership:'Ownership',fun:'Fun',players:'Players',champions:'Champions',salaries:'Salaries'};
 
-  // Inject sticky nav before app div (outside app)
+  // Inject sticky nav before app div (outside app), but after the ticker
   let nav = document.getElementById('site-nav');
   if (!nav) {
     nav = document.createElement('div');
     nav.id = 'site-nav';
     nav.className = 'nav-bar';
-    document.getElementById('app').before(nav);
+    // Insert right before #app, which is after the ticker
+    const appEl = document.getElementById('app');
+    appEl.parentNode.insertBefore(nav, appEl);
   }
   nav.innerHTML = `<div class="nav-inner">
     <span class="nav-logo">DUDFL</span>
@@ -1207,16 +1356,38 @@ function renderDashboard() {
 
   nav.onclick = e => {
     const t = e.target.dataset.tab;
-    if (t) { currentTab = t; renderDashboard(); }
+    if (t && t !== currentTab) {
+      currentTab = t;
+      // Just update active tab highlight + re-render content — skip full dashboard rebuild
+      nav.querySelectorAll('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === t));
+      renderTab();
+    }
   };
+
+  // Build the ticker once (idempotent — skip if already populated)
+  if (!document.getElementById('rz-track')?.dataset.built) {
+    const latestLeagueId = dashData?._leagueId;
+    if (latestLeagueId) {
+      if (document.getElementById('rz-track')) document.getElementById('rz-track').dataset.built = '1';
+      buildTicker(latestLeagueId);
+    }
+  }
+
   renderTab();
 }
 
-function renderTab() {
+const tabCache = {};
+function renderTab(force = false) {
   const el = document.getElementById('tab-content');
   if (!el) return;
+  if (!force && tabCache[currentTab]) {
+    el.innerHTML = tabCache[currentTab];
+    return;
+  }
   const fns = {overview:tabOverview,leaderboards:tabLeaderboards,records:tabRecords,'head-to-head':tabH2H,seasons:tabSeasons,ownership:tabOwnership,fun:tabFun,players:tabPlayers,champions:tabChampions,salaries:tabSalaries};
-  el.innerHTML = `<div class="tab-content-inner">${(fns[currentTab] || (() => ''))()}</div>`;
+  const html = `<div class="tab-content-inner">${(fns[currentTab] || (() => ''))()}</div>`;
+  tabCache[currentTab] = html;
+  el.innerHTML = html;
 }
 
 function lbCard(title, arr, valFn, subFn) {
@@ -1397,7 +1568,7 @@ function tabSeasons() {
           return `<div class="season-row">
             <span class="rank ${i===0?'gold':i===1?'silver':''}" style="min-width:24px;font-size:14px">${sym}</span>
             ${av(m.name,m.oid,26)}
-            <span style="font-size:13px;font-weight:500;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:8px;color:${i===0?'var(--text)':'var(--text2)'}">${m.name}</span>
+            <span style="font-size:13px;font-weight:500;min-width:0;flex:1;word-break:break-word;padding-left:8px;color:${i===0?'var(--text)':'var(--text2)'}">${m.name}</span>
             <div class="bar-wrap"><div class="bar-fill" style="width:${((m.wins/maxW)*100).toFixed(0)}%;background:${i===0?'var(--gold)':fg};opacity:${i===0?0.85:0.4}"></div></div>
             <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);min-width:48px;text-align:right">${m.wins}&ndash;${m.losses}</span>
             <span style="font-family:var(--font-display);font-size:17px;font-weight:700;min-width:68px;text-align:right;color:${i===0?'var(--gold)':'var(--text2)'}">${fmtInt(m.pf)}</span>
@@ -2003,8 +2174,8 @@ function posChipS(pos) {
 function playerRow(c, showOwner=false) {
   return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
     ${posChipS(c.pos)}
-    <span style="font-size:13px;color:var(--text);flex:1;font-weight:${c.s>=10?'500':'400'};min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.n}</span>
-    ${showOwner ? `<span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0;letter-spacing:0.04em;max-width:70px;overflow:hidden;text-overflow:ellipsis">${c.owner.split(' ')[0]}</span>` : ''}
+    <span style="font-size:13px;color:var(--text);flex:1;font-weight:${c.s>=10?'500':'400'};min-width:0;word-break:break-word">${c.n}</span>
+    ${showOwner ? `<span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);flex-shrink:0;letter-spacing:0.04em;">${c.owner.split(' ')[0]}</span>` : ''}
     ${contractBadge(c)}
     <span style="font-family:var(--font-display);font-size:17px;font-weight:700;color:${c.s>=20?'var(--gold)':c.s>=10?'var(--text)':'var(--text2)'};min-width:42px;text-align:right">$${c.s}</span>
   </div>`;
@@ -2361,7 +2532,7 @@ function renderBianchiLaw(salData) {
       ${posChipS(c.pos)}
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:5px;min-width:0">
-          <span style="font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1">${c.n}</span>
+          <span style="font-size:13px;font-weight:500;color:var(--text);word-break:break-word;min-width:0;flex:1">${c.n}</span>
           ${c.posRank ? posRankBadge(c.posRank) : ''}
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
@@ -2539,7 +2710,7 @@ function renderMoneyTeams(salData, scoringMap, season) {
             <span style="font-family:var(--font-mono);font-size:9px;font-weight:600;color:var(--text3);min-width:34px;letter-spacing:0.04em">${p.slot}</span>
             ${posChipS(p.pos)}
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.n}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);word-break:break-word">${p.n}</div>
               <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:1px">${p.owner} · $${p.s} · ${p.y}/${p.t}${p.ro?' RO':''} · <span style="color:${p.weeks>=12?'var(--green-text)':p.weeks>=8?'var(--text3)':'var(--red-text)'}">${p.weeks}gp</span></div>
             </div>
             <div style="text-align:right;flex-shrink:0">
@@ -2606,11 +2777,199 @@ function renderMoneyTeams(salData, scoringMap, season) {
     </div>`;
 }
 
+// ── REDZONE TICKER ─────────────────────────────────────────────
+async function buildTicker(leagueId) {
+  const items = [];
+  const sep = () => `<span class="rz-item-sep">◆</span>`;
+
+  try {
+    // Use already-loaded data where possible, only fetch current rosters live
+    const { recentRawTxns = [], latestRosterOwner = {}, userMap = {}, avatarMap = {}, playerMap = {}, champRosters = [] } = dashData || {};
+
+    const rosters = await fetchJ(`${API}/league/${leagueId}/rosters`);
+
+    // Build owner name map from userMap (already loaded)
+    const ownerName = (ownerId) => userMap[ownerId] || ownerId || 'Unknown';
+    const playerName = (pid) => playerMap[pid]?.name || null;
+    const playerPos  = (pid) => playerMap[pid]?.pos  || '';
+
+    // Small circular team logo — falls back to coloured initials
+    const teamLogo = (ownerId, size = 18) => {
+      const hash = avatarMap[ownerId];
+      const name = ownerName(ownerId);
+      const [bg, fg] = (typeof colorFor === 'function') ? colorFor(ownerId) : ['#252533','#9897a4'];
+      if (hash) {
+        return `<img src="https://sleepercdn.com/avatars/thumbs/${hash}" ` +
+          `style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;` +
+          `flex-shrink:0;vertical-align:middle;margin-right:3px;border:1px solid rgba(255,255,255,0.15)" ` +
+          `onerror="this.style.display='none'">`;
+      }
+      // Initials fallback
+      const ini = name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      return `<span style="display:inline-flex;align-items:center;justify-content:center;` +
+        `width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:${fg};` +
+        `font-size:${Math.round(size*0.45)}px;font-weight:700;flex-shrink:0;` +
+        `margin-right:3px;font-family:var(--font-display);letter-spacing:0">${ini}</span>`;
+    };
+
+    // rosterOwner: prefer live rosters (in case ownership changed), fallback to stored
+    const rOwner = { ...latestRosterOwner };
+    for (const r of rosters) if (r.owner_id) rOwner[r.roster_id] = r.owner_id;
+
+    // 1. Reigning champ
+    if (champRosters.length) {
+      const latest = champRosters[champRosters.length - 1];
+      items.push((() => {
+        const champUserId = Object.keys(userMap).find(id => userMap[id] === latest.ownerName) || '';
+        return `<span class="rz-item"><span class="rz-tag rz-tag-champ">🏆 Reigning Champ</span>${teamLogo(champUserId)}<span class="rz-strong">${latest.ownerName}</span><span class="rz-dim"> — ${latest.season} Champion</span></span>`;
+      })());
+    }
+
+    // 2. Current standings from live rosters
+    const standings = rosters
+      .filter(r => r.owner_id)
+      .map(r => ({
+        ownerId: r.owner_id,
+        name: ownerName(r.owner_id),
+        wins: r.settings?.wins || 0,
+        losses: r.settings?.losses || 0,
+        pf: (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) * 0.01,
+      }))
+      .sort((a,b) => b.wins - a.wins || b.pf - a.pf);
+
+    if (standings.length >= 3) {
+      const top3 = standings.slice(0, 3);
+      const str = top3.map((m,i) => `${teamLogo(m.ownerId)}<span class="rz-strong">${['1st','2nd','3rd'][i]}: ${m.name}</span><span class="rz-dim"> (${m.wins}–${m.losses})</span>`).join(' · ');
+      items.push(`<span class="rz-item"><span class="rz-tag rz-tag-standing">📊 Standings</span>${str}</span>`);
+    }
+
+    // 3. Trading block — scan roster metadata for flagged players
+    for (const r of rosters) {
+      if (!r.owner_id) continue;
+      const oName = ownerName(r.owner_id);
+
+      // Sleeper puts trade block in metadata as comma-separated player IDs
+      const raw = r.metadata?.trade_block_players || r.metadata?.tradeable_players || '';
+      const pids = typeof raw === 'string'
+        ? raw.split(',').map(s => s.trim()).filter(Boolean)
+        : Array.isArray(raw) ? raw : [];
+
+      const names = pids.map(pid => {
+        const n = playerName(pid);
+        const pos = playerPos(pid);
+        return n ? `${n}${pos ? ` <span class="rz-dim">(${pos})</span>` : ''}` : null;
+      }).filter(Boolean);
+
+      if (names.length) {
+        items.push(`<span class="rz-item"><span class="rz-tag rz-tag-block">📤 Trade Block</span>${teamLogo(r.owner_id)}<span class="rz-strong">${oName}</span> shopping: ${names.join(', ')}</span>`);
+      }
+    }
+
+    // 4. Last 5 trades from already-loaded transactions
+    const trades = recentRawTxns
+      .filter(t => t.type === 'trade')
+      .slice(0, 5);
+
+    for (const trade of trades) {
+      const rids = trade.roster_ids || Object.keys(trade.rosters || {});
+
+      // Build per-roster asset lists: players received + picks received
+      const rosterAssets = {}; // roster_id -> { name, gets: [] }
+      for (const rid of rids) {
+        const oName = ownerName(rOwner[String(rid)]);
+        if (oName === 'Unknown') continue;
+        rosterAssets[String(rid)] = { ownerId: rOwner[String(rid)], name: oName, gets: [] };
+      }
+
+      // trade.adds = { player_id: roster_id_receiving }
+      for (const [pid, toRid] of Object.entries(trade.adds || {})) {
+        const key = String(toRid);
+        if (!rosterAssets[key]) continue;
+        const n = playerName(pid);
+        const pos = playerPos(pid);
+        if (n) rosterAssets[key].gets.push(`${n}${pos ? ` (${pos})` : ''}`);
+      }
+
+      // draft_picks: owner_id = roster that RECEIVES the pick
+      const suffixes = ['','st','nd','rd'];
+      for (const p of (trade.draft_picks || [])) {
+        const key = String(p.owner_id);
+        if (!rosterAssets[key]) continue;
+        const round = p.round ? `${p.round}${suffixes[p.round] || 'th'}` : '?';
+        const yr = p.season ? `'${String(p.season).slice(2)} ` : '';
+        rosterAssets[key].gets.push(`${yr}${round} pick`);
+      }
+
+      const sides = Object.values(rosterAssets).filter(r => r.gets.length > 0);
+      if (sides.length < 2) continue;
+
+      // Format: TeamA gets X, Y · TeamB gets A, B
+      const sideStr = sides.map(s =>
+        `${teamLogo(s.ownerId)}<span class="rz-strong">${s.name}</span> <span class="rz-dim">gets ${s.gets.join(', ')}</span>`
+      ).join(' <span class="rz-dim">·</span> ');
+
+      items.push(`<span class="rz-item"><span class="rz-tag rz-tag-trade">🔄 Trade</span>${sideStr}</span>`);
+    }
+
+    // 5. Last 6 waiver/FA pickups
+    const waivers = recentRawTxns
+      .filter(t => t.type === 'waiver' || t.type === 'free_agent')
+      .filter(t => Object.keys(t.adds || {}).length > 0)
+      .slice(0, 6);
+
+    for (const w of waivers) {
+      const rid = (w.roster_ids || [])[0];
+      const oName = ownerName(rOwner[String(rid)]);
+      const addedPid = Object.keys(w.adds)[0];
+      const addedName = playerName(addedPid);
+      if (!addedName) continue;
+      const pos = playerPos(addedPid);
+      const droppedPid = Object.keys(w.drops || {})[0];
+      const droppedName = droppedPid ? playerName(droppedPid) : null;
+      const label = w.type === 'waiver' ? '📋 Waiver' : '✍️ FA';
+      const dropPart = droppedName ? ` <span class="rz-dim">/ cut ${droppedName}</span>` : '';
+      items.push(`<span class="rz-item"><span class="rz-tag rz-tag-waiver">${label}</span>${teamLogo(rOwner[String(rid)])}<span class="rz-strong">${oName}</span> adds <span class="rz-strong">${addedName}</span>${pos ? ` <span class="rz-dim">(${pos})</span>` : ''}${dropPart}</span>`);
+    }
+
+    // 6. Pure cuts
+    const cuts = recentRawTxns
+      .filter(t => (t.type === 'waiver' || t.type === 'free_agent') && !Object.keys(t.adds || {}).length && Object.keys(t.drops || {}).length)
+      .slice(0, 3);
+
+    for (const d of cuts) {
+      const rid = (d.roster_ids || [])[0];
+      const oName = ownerName(rOwner[String(rid)]);
+      const pid = Object.keys(d.drops)[0];
+      const pName = playerName(pid);
+      if (!pName) continue;
+      items.push(`<span class="rz-item"><span class="rz-tag rz-tag-drop">✂️ Cut</span>${teamLogo(rOwner[String(rid)])}<span class="rz-strong">${oName}</span> released <span class="rz-strong">${pName}</span></span>`);
+    }
+
+  } catch(e) {
+    console.warn('Ticker error:', e);
+  }
+
+  if (!items.length) {
+    items.push(`<span class="rz-item"><span class="rz-dim">No recent league activity</span></span>`);
+  }
+
+  const joined = items.map((item, i) => item + (i < items.length - 1 ? sep() : '')).join('');
+  const doubled = joined + sep() + joined;
+
+  const track = document.getElementById('rz-track');
+  if (track) {
+    track.innerHTML = doubled;
+    requestAnimationFrame(() => {
+      const duration = Math.max(25, Math.min(100, track.scrollWidth / 12));
+      track.style.animationDuration = `${duration}s`;
+    });
+  }
+}
+
 loadAll('1313934632156147712').catch(e => {
   render(`<div style="padding:3rem 1rem;text-align:center">
     <div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Could not load league data: ${e.message}</div>
     <button class="primary" onclick="loadAll('1313934632156147712').catch(()=>{})">Retry</button>
-
   </div>`);
 });
 </script>
