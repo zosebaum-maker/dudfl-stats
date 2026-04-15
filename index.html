@@ -2175,6 +2175,7 @@ function renderBianchiLaw(salData) {
     posBuckets[pos].push({ pid, totalPts: s.totalPts });
   }
   for (const [pos, arr] of Object.entries(posBuckets)) {
+    // Rank by total points — how they actually finished at their position in the season
     arr.sort((a, b) => b.totalPts - a.totalPts);
     arr.forEach((p, i) => {
       posRankMap[p.pid] = { rank: i + 1, label: `${pos}${i + 1}` };
@@ -2188,27 +2189,58 @@ function renderBianchiLaw(salData) {
   const rosteredWithData = matched
     .filter(c => c.owner !== 'Free Agent' && c.owner !== 'Unknown' && c.pid && scoringMap[c.pid]);
 
-  // ── PER-POSITION MARKET RATES ──
-  // QBs score 3-4x more PPW than WRs/RBs, so a blended rate makes every QB look like a steal.
-  // Instead, calculate market rate separately per position:
-  // what does $1 buy you in PPW at THIS position in THIS league?
-  const posSalaryTotals = {};
-  const posPPWTotals = {};
+  // ── PER-POSITION SALARY-TIER EXPECTED PPW ──
+  // The core problem: with $1 as the salary floor, any method that extrapolates a line
+  // from high salaries down to $1 will either make all $1 players look like steals
+  // (low intercept) or all $1 players look like busts (high intercept).
+  //
+  // Solution: bucket players into salary tiers and compare each player to the median
+  // PPW of others at the same position AND same salary tier. That way a $1 WR is
+  // judged against other $1 WRs, a $10 WR against other $10 WRs, etc.
+  //
+  // Tiers: $1, $2-3, $4-6, $7-10, $11-15, $16-24, $25+
+
+  function getSalaryTier(s) {
+    if (s <= 1)  return '1';
+    if (s <= 3)  return '2-3';
+    if (s <= 6)  return '4-6';
+    if (s <= 10) return '7-10';
+    if (s <= 15) return '11-15';
+    if (s <= 24) return '16-24';
+    return '25+';
+  }
+
+  // Build tier medians per position
+  const tierBuckets = {}; // "pos|tier" -> [ppw values]
+  for (const c of rosteredWithData) {
+    const key = `${c.pos}|${getSalaryTier(c.s)}`;
+    if (!tierBuckets[key]) tierBuckets[key] = [];
+    tierBuckets[key].push(scoringMap[c.pid].avgPts);
+  }
+  const tierMedian = {}; // "pos|tier" -> median PPW
+  for (const [key, vals] of Object.entries(tierBuckets)) {
+    const sorted = [...vals].sort((a,b)=>a-b);
+    const mid = Math.floor(sorted.length / 2);
+    tierMedian[key] = sorted.length % 2 !== 0
+      ? sorted[mid]
+      : (sorted[mid-1] + sorted[mid]) / 2;
+  }
+
+  // Fallback: per-position average if tier has no data
+  const posSalaryTotals = {}, posPPWTotals = {}, posCount = {};
   for (const c of rosteredWithData) {
     const pos = c.pos || 'Unknown';
-    posSalaryTotals[pos] = (posSalaryTotals[pos] || 0) + c.s;
-    posPPWTotals[pos]    = (posPPWTotals[pos]    || 0) + scoringMap[c.pid].avgPts;
+    posSalaryTotals[pos] = (posSalaryTotals[pos]||0) + c.s;
+    posPPWTotals[pos]    = (posPPWTotals[pos]   ||0) + scoringMap[c.pid].avgPts;
+    posCount[pos]        = (posCount[pos]        ||0) + 1;
   }
-  const posMarketRate = {}; // pos -> PPW per $1 at that position
-  const fallbackRate  = rosteredWithData.length
-    ? rosteredWithData.reduce((s,c)=>s+scoringMap[c.pid].avgPts,0) / rosteredWithData.reduce((s,c)=>s+c.s,0)
-    : 5;
+  const posMarketRate = {};
+  const fallbackRate = rosteredWithData.length
+    ? rosteredWithData.reduce((s,c)=>s+scoringMap[c.pid].avgPts,0) / rosteredWithData.length
+    : 10;
   for (const pos of Object.keys(posSalaryTotals)) {
-    posMarketRate[pos] = posSalaryTotals[pos] > 0
-      ? posPPWTotals[pos] / posSalaryTotals[pos]
-      : fallbackRate;
+    posMarketRate[pos] = posCount[pos] > 0 ? posPPWTotals[pos] / posCount[pos] : fallbackRate;
   }
-  // Keep a single league-wide rate for display in the header
   const MARKET_RATE = fallbackRate;
 
   // Enrich each rostered contract with scoring + value judgment
@@ -2218,10 +2250,42 @@ function renderBianchiLaw(salData) {
       const score = scoringMap[c.pid];
       if (!score) return { ...c, hasData: false };
       const ppw = score.avgPts;
-      const posRate = posMarketRate[c.pos] || fallbackRate; // use this position's market rate
-      const fairValue = Math.max(1, Math.round(ppw / posRate));
+      const tierKey = `${c.pos}|${getSalaryTier(c.s)}`;
+      const posKey  = c.pos;
+      const tierVals = tierBuckets[tierKey] || [];
+
+      // If the tier has fewer than 3 players, it's not a reliable peer group
+      // (e.g. CMC is the only $30 RB — comparing him to himself is meaningless).
+      // Instead, use a salary-percentile interpolation:
+      // find where this salary sits in the full position salary distribution
+      // and interpolate expected PPW between the min and max of that position.
+      let expectedPPW;
+      if (tierVals.length >= 3) {
+        expectedPPW = tierMedian[tierKey];
+      } else {
+        // Interpolate: rank this salary among all rostered players at this position
+        const posPlayers = rosteredWithData.filter(p => p.pos === c.pos)
+          .sort((a,b) => a.s - b.s);
+        if (posPlayers.length >= 2) {
+          // Find salary percentile within position
+          const below = posPlayers.filter(p => p.s <= c.s);
+          const pct = below.length / posPlayers.length;
+          // Expected PPW = PPW at that percentile of the position's PPW distribution
+          const ppwSorted = posPlayers
+            .map(p => scoringMap[p.pid]?.avgPts || 0)
+            .sort((a,b) => a - b);
+          const idx = Math.min(Math.round(pct * (ppwSorted.length - 1)), ppwSorted.length - 1);
+          expectedPPW = ppwSorted[idx];
+        } else {
+          expectedPPW = posMarketRate[posKey] || fallbackRate;
+        }
+      }
+      expectedPPW = Math.max(0.5, expectedPPW);
+      const rawRatio = ppw / expectedPPW; // 1.0 = median for their position+salary tier
+      // fairValue = salary scaled by how much over/under their peer group they produced
+      // ratio 1.0 = worth exactly what they cost, 2.0 = worth double, 0.5 = worth half
+      const fairValue = Math.max(1, Math.round(c.s * rawRatio));
       const delta = fairValue - c.s;
-      const rawRatio = ppw / (c.s * posRate); // 1.0 = exactly market rate FOR THIS POSITION
       const posRank = posRankMap[c.pid] || null;
 
       // ── RANK-ADJUSTED RATIO ──
@@ -2240,15 +2304,21 @@ function renderBianchiLaw(salData) {
       const bustThreshold    = 1 - tolerance;   // e.g. 0.60 for top-3
       const bargainThreshold = 1 + tolerance;   // e.g. 1.40 for top-3
 
-      return { ...c, ppw, weeks: score.weeks, totalPts: score.totalPts, fairValue, delta, ratio, rawRatio, posRank, bustThreshold, bargainThreshold, hasData: true };
+      // dollarImpact = how many dollars of value were lost/gained vs expectation
+      // = (actual PPW - expected PPW) * salary / expected PPW
+      // A $15 player scoring 50% below expectation has far more impact than a $1 player doing the same
+      const dollarImpact = (ppw - expectedPPW) * c.s / Math.max(expectedPPW, 0.1);
+
+      return { ...c, ppw, weeks: score.weeks, totalPts: score.totalPts, fairValue, delta, ratio, rawRatio, posRank, bustThreshold, bargainThreshold, dollarImpact, expectedPPW, hasData: true };
     });
 
   const withData = enriched.filter(c => c.hasData);
   const noData   = enriched.filter(c => !c.hasData);
 
   const byDelta  = [...withData].sort((a, b) => b.delta - a.delta);
-  const bargains = byDelta.filter(c => c.ratio >= c.bargainThreshold);
-  const busts    = [...withData].filter(c => c.ratio < c.bustThreshold).sort((a,b) => a.ratio - b.ratio);
+  // Sort busts by dollar impact (most expensive underperformance first), not raw ratio
+  const bargains = [...withData].filter(c => c.ratio >= c.bargainThreshold).sort((a,b) => b.ratio - a.ratio);
+  const busts    = [...withData].filter(c => c.ratio < c.bustThreshold && c.s >= 4).sort((a,b) => a.dollarImpact - b.dollarImpact);
   // Market value = within each player's rank-adjusted tolerance band
   const marketVal = [...withData].filter(c => c.ratio >= c.bustThreshold && c.ratio < c.bargainThreshold)
     .sort((a,b) => b.ppw - a.ppw);
@@ -2302,7 +2372,7 @@ function renderBianchiLaw(salData) {
       <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:3px">
         ${valueLabel(c)}
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">paid $${c.s} · worth ~$${c.fairValue}</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">$${c.s} · exp ${c.expectedPPW.toFixed(1)} · got ${c.ppw.toFixed(1)}</span>
           <span style="font-family:var(--font-display);font-size:15px;font-weight:800;color:${deltaColor}">${deltaStr}</span>
         </div>
       </div>
