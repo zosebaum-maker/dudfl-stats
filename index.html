@@ -1985,6 +1985,77 @@ const CONTRACT_LIST = [
   {s:1,n:'Jarquez Hunter',y:1,t:3,ro:false},
 ];
 
+// ── CAP PENALTIES / BONUSES ──
+// Positive = counts AGAINST the cap. Negative = team GAINS cap space.
+// Items with year:2027 are deferred and excluded from current-year totals.
+const CAP_ADJUSTMENTS = {
+  'jpeezy88': [
+    { amount: -1, note: 'Carry over' },
+    { amount: -1, note: 'From Brad' },
+    { amount: -14, note: 'From Brad' },
+  ],
+  'tomhardyshardcocl': [
+    { amount: 1, note: 'Davis' },
+  ],
+  'TMcLeod19': [
+    { amount: -2, note: 'Carry over' },
+  ],
+  'bianchba': [
+    { amount: 4,  note: 'To Cody' },
+    { amount: 3,  note: 'Pitts' },
+    { amount: 2,  note: 'Cousins/Gibson' },
+    { amount: 1,  note: 'To John' },
+    { amount: 2,  note: 'Tanking' },
+    { amount: 3,  note: 'Mixon' },
+    { amount: 14, note: 'To John' },
+    { amount: 2,  note: 'Mixon', year: 2027 }, // deferred — does not count this year
+  ],
+  'cmurdaakathetruth': [
+    { amount: -4, note: 'From Brad' },
+  ],
+  'AOlson519': [
+    { amount: -2, note: 'Carry over' },
+    { amount: 2,  note: 'Singletary/Wicks' },
+    { amount: 1,  note: 'Steele' },
+    { amount: 1,  note: 'McLaughlin' },
+  ],
+  'jujushitpoopster': [
+    { amount: -1, note: 'Carry over' },
+    { amount: 1,  note: 'Baker' },
+  ],
+  'Beezneez': [
+    { amount: -1, note: 'Carry over' },
+  ],
+  'JuiceManRic': [
+    { amount: -1, note: 'Carry over' },
+  ],
+};
+
+// ── CAP_ADJUSTMENTS LOOKUP BY OWNER NAME (display name) ──
+// Maps the Sleeper display name -> adjustments
+const CAP_ADJ_BY_OWNER = {};
+for (const [key, adjs] of Object.entries(CAP_ADJUSTMENTS)) {
+  CAP_ADJ_BY_OWNER[key.toLowerCase()] = adjs;
+}
+
+function getCapAdjustments(ownerName) {
+  if (!ownerName) return [];
+  const key = ownerName.toLowerCase().replace(/\s+/g,'');
+  for (const [k, adjs] of Object.entries(CAP_ADJ_BY_OWNER)) {
+    if (key === k.replace(/\s+/g,'') || ownerName.toLowerCase().includes(k) || k.includes(ownerName.toLowerCase())) {
+      return adjs;
+    }
+  }
+  // Also try partial match on the original owner string
+  const ownerLower = ownerName.toLowerCase();
+  for (const [k, adjs] of Object.entries(CAP_ADJ_BY_OWNER)) {
+    if (ownerLower.startsWith(k.slice(0,6)) || k.startsWith(ownerLower.slice(0,6))) {
+      return adjs;
+    }
+  }
+  return [];
+}
+
 // Normalize name for fuzzy matching
 function normName(n) {
   return n.toLowerCase()
@@ -2194,18 +2265,46 @@ function renderSalaryContent(data) {
 
     el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
       ${owners.map(([owner, contracts]) => {
-        const total = contracts.reduce((s,c)=>s+c.s,0);
+        const contractTotal = contracts.reduce((s,c)=>s+c.s,0);
+        const adjs = getCapAdjustments(owner);
+        // Only sum adjustments that are NOT deferred (no year:2027)
+        const adjTotal = adjs.filter(a => a.year !== 2027).reduce((s,a)=>s+a.amount,0);
+        const total = contractTotal + adjTotal;
         const remaining = CAP - total;
         const usedPct = Math.min((total / CAP) * 100, 100).toFixed(0);
         const expiring = contracts.filter(c=>c.y===c.t).length;
         const [bg,fg] = colorFor(owner);
         const capColor = remaining < 0 ? 'var(--red-text)' : remaining < 10 ? 'var(--amber-text)' : 'var(--green-text)';
+
+        // Build cap adjustments HTML
+        const adjHTML = adjs.length ? `
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px">Cap adjustments</div>
+            ${adjs.map(a => {
+              const isDeferred = a.year === 2027;
+              const isBonus = a.amount < 0;
+              const color = isDeferred ? 'var(--text3)' : isBonus ? 'var(--green-text)' : 'var(--red-text)';
+              const sign = a.amount >= 0 ? '+' : '';
+              const deferredTag = isDeferred
+                ? `<span style="font-family:var(--font-mono);font-size:8px;background:rgba(255,255,255,0.07);color:var(--text3);border-radius:3px;padding:1px 4px;margin-left:4px">2027</span>`
+                : '';
+              return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">
+                <span style="font-size:12px;color:${isDeferred?'var(--text3)':'var(--text2)'};flex:1">${a.note}${deferredTag}</span>
+                <span style="font-family:var(--font-display);font-size:15px;font-weight:700;color:${color};min-width:36px;text-align:right">${isDeferred?'—':sign+'$'+Math.abs(a.amount)}</span>
+              </div>`;
+            }).join('')}
+            ${adjTotal !== 0 ? `<div style="display:flex;justify-content:space-between;padding-top:5px;margin-top:2px">
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase">Net adjustment</span>
+              <span style="font-family:var(--font-display);font-size:14px;font-weight:700;color:${adjTotal<0?'var(--green-text)':'var(--red-text)'}">${adjTotal<0?'+$'+Math.abs(adjTotal):'-$'+adjTotal} cap ${adjTotal<0?'gained':'hit'}</span>
+            </div>` : ''}
+          </div>` : '';
+
         return `<div style="background:var(--dark2);padding:1.125rem 1.25rem">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
             <div style="width:32px;height:32px;border-radius:50%;background:${bg};color:${fg};display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:13px;font-weight:700;flex-shrink:0">${initials(owner)}</div>
             <div style="flex:1;min-width:0">
               <div style="font-family:var(--font-display);font-size:16px;font-weight:800;text-transform:uppercase;color:var(--text);letter-spacing:0.02em">${owner}</div>
-              <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">${contracts.length} players · ${expiring} expiring</div>
+              <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">${contracts.length} players · ${expiring} expiring${adjs.length ? ` · <span style="color:${adjTotal<0?'var(--green-text)':'var(--amber-text)'}">cap adj: ${adjTotal>=0?'+':''}$${adjTotal}</span>` : ''}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-family:var(--font-display);font-size:22px;font-weight:800;color:var(--gold);line-height:1">$${total}<span style="font-size:13px;color:var(--text3);font-weight:400"> / $${CAP}</span></div>
@@ -2216,6 +2315,7 @@ function renderSalaryContent(data) {
             <div style="height:3px;border-radius:2px;width:${usedPct}%;background:${remaining<0?'var(--red)':remaining<10?'var(--gold)':'var(--green)'};transition:width 0.3s ease"></div>
           </div>
           ${contracts.map(c=>playerRow(c)).join('')}
+          ${adjHTML}
         </div>`;
       }).join('')}
     </div>`;
