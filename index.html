@@ -466,13 +466,26 @@ body {
   color: var(--text3); text-transform: uppercase;
 }
 .progress-outer {
-  width: 240px; height: 2px;
+  width: min(320px, 80vw); height: 3px;
   background: var(--dark4);
-  border-radius: 1px;
+  border-radius: 2px;
+  overflow: hidden;
 }
 .progress-inner {
-  height: 2px; background: var(--gold);
-  border-radius: 1px; transition: width 0.4s ease;
+  height: 3px; background: linear-gradient(90deg, var(--gold), var(--gold2));
+  border-radius: 2px; transition: width 0.35s cubic-bezier(0.4,0,0.2,1);
+  position: relative;
+}
+.progress-inner::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+.loading-pct {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text3); letter-spacing: 0.1em;
 }
 .spinner {
   width: 32px; height: 32px;
@@ -699,10 +712,21 @@ button.primary:hover { background: var(--gold2); border-color: var(--gold2); }
   .card-solo { padding: 0.875rem 1rem; }
   .card { padding: 0.875rem 1rem; }
 
-  /* Prevent grid columns from overflowing on narrow screens */
+  /* Prevent grid columns from overflowing on narrow screens — keep all cols */
   [style*="grid-template-columns:24px 32px 1fr auto auto"] {
-    grid-template-columns: 20px 26px 1fr auto !important;
+    grid-template-columns: 18px 26px 1fr auto 38px !important;
   }
+  /* New 6-col all-time standings — hide win-rate bar on mobile */
+  [style*="grid-template-columns:24px 32px 1fr 80px auto auto"] {
+    grid-template-columns: 18px 26px 1fr 0 auto 38px !important;
+  }
+  [style*="grid-template-columns:24px 32px 1fr 80px auto auto"] > *:nth-child(4) {
+    display: none !important;
+  }
+  /* Shrink standings cells on mobile so everything fits one line */
+  .std-wl { font-size: 10px !important; padding: 0 5px !important; letter-spacing: 0 !important; }
+  .std-wl span { font-size: 9px !important; }
+  .std-ppg { font-size: 14px !important; min-width: 34px !important; }
   /* Allow W-L to wrap on very small screens */
   .val { font-size: 13px; }
   .val-sub { font-size: 9px; }
@@ -933,6 +957,11 @@ function initials(name) {
 }
 function av(name, id, size=28) {
   const [bg,fg] = colorFor(id||name);
+  const hash = (dashData?.avatarMap||{})[id];
+  if (hash) {
+    const fallback = `this.outerHTML='<div class=&quot;av&quot; style=&quot;width:${size}px;height:${size}px;background:${bg};color:${fg};font-size:${size<30?11:13}px&quot;>${initials(name)}</div>'`;
+    return `<img src="https://sleepercdn.com/avatars/thumbs/${hash}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block" onerror="${fallback}" alt="${name}">`;
+  }
   return `<div class="av" style="width:${size}px;height:${size}px;background:${bg};color:${fg};font-size:${size<30?11:13}px">${initials(name)}</div>`;
 }
 function render(html) { app.innerHTML = html; }
@@ -960,18 +989,67 @@ function showSetup(prefill='', error='') {
 }
 
 function showLoading(msg, pct) {
-  render(`<div class="loading">
+  // If the loading screen is already showing, update in-place to avoid flicker
+  const existing = document.getElementById('loading-screen');
+  if (existing) {
+    const msgEl = existing.querySelector('.loading-msg');
+    const barEl = existing.querySelector('.progress-inner');
+    const pctEl = existing.querySelector('.loading-pct');
+    if (msgEl) msgEl.textContent = msg;
+    if (barEl && pct != null) barEl.style.width = pct + '%';
+    if (pctEl && pct != null) pctEl.textContent = pct + '%';
+    return;
+  }
+  render(`<div class="loading" id="loading-screen">
     <div class="loading-title">DUDFL</div>
-    <p>${msg}</p>
-    ${pct!=null ? `<div class="progress-outer"><div class="progress-inner" style="width:${pct}%"></div></div>` : '<div class="spinner"></div>'}
+    <p class="loading-msg">${msg}</p>
+    ${pct!=null
+      ? `<div class="progress-outer"><div class="progress-inner" style="width:${pct}%"></div></div><div class="loading-pct">${pct}%</div>`
+      : '<div class="spinner"></div>'}
   </div>`);
 }
 
+// ── FETCH HELPERS ──────────────────────────────────────────────────────────
+
+// In-memory request dedup: if the same URL is in-flight, reuse the promise
+const _inFlight = new Map();
 async function fetchJ(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  if (_inFlight.has(url)) return _inFlight.get(url);
+  const p = fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .finally(() => _inFlight.delete(url));
+  _inFlight.set(url, p);
+  return p;
 }
+
+// localStorage cache with TTL
+const CACHE_TTL = {
+  league:    4 * 60 * 60 * 1000,  // 4 h  — league meta changes rarely
+  season:   30 * 60 * 1000,       // 30 min — past seasons never change; current might
+  players:  24 * 60 * 60 * 1000,  // 24 h  — player DB is huge, cache aggressively
+};
+function lsGet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    const ttl = Object.entries(CACHE_TTL).find(([k]) => key.startsWith('sc_'+k))?.[1] || 60*60*1000;
+    if (Date.now() - ts > ttl) { localStorage.removeItem(key); return null; }
+    return data;
+  } catch { return null; }
+}
+function lsSet(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch {}
+}
+
+async function fetchCached(url, cacheKey) {
+  const hit = lsGet(cacheKey);
+  if (hit) return hit;
+  const data = await fetchJ(url);
+  lsSet(cacheKey, data);
+  return data;
+}
+
+// ── LOAD ALL ──────────────────────────────────────────────────────────────
 
 async function startLoad() {
   const inp = document.getElementById('lid');
@@ -988,60 +1066,78 @@ async function startLoad() {
 async function loadAll(startId) {
   showLoading('Connecting to Sleeper...', 5);
 
-  const leagues = [];
+  // ── Step 1: Walk the league chain — fetch all league metas in parallel ──
+  // First pass: serial walk just to collect IDs (each response gives previous_league_id)
+  // Optimisation: cache each league object so revisits are instant
+  const leagueIds = [];
   let cur = startId;
   while (cur && cur !== '0') {
-    const lg = await fetchJ(`${API}/league/${cur}`);
-    leagues.unshift(lg);
+    const lg = await fetchCached(`${API}/league/${cur}`, `sc_league_${cur}`);
+    leagueIds.unshift(cur);
     cur = lg.previous_league_id || null;
   }
-  if (!leagues.length) throw new Error('No league found for that ID.');
+  if (!leagueIds.length) throw new Error('No league found for that ID.');
 
+  // Re-fetch all league metas from cache (instant after first load)
+  const leagues = await Promise.all(
+    leagueIds.map(id => fetchCached(`${API}/league/${id}`, `sc_league_${id}`))
+  );
   const leagueName = leagues[leagues.length-1].name || 'Fantasy League';
-  const allData = [];
 
-  for (let i = 0; i < leagues.length; i++) {
-    const lg = leagues[i];
-    const pct = 10 + Math.round((i/leagues.length)*70);
-    showLoading(`Loading ${lg.season} (${i+1}/${leagues.length})...`, pct);
+  showLoading(`Found ${leagues.length} season${leagues.length!==1?'s':''}...`, 12);
 
+  // ── Step 2: Fetch ALL seasons fully in parallel ──────────────────────────
+  // Each season: users + rosters + matchups (all weeks) + transactions + bracket
+  // All seasons fire simultaneously instead of waiting one-by-one.
+  const now = new Date().getFullYear();
+
+  const seasonPromises = leagues.map(async (lg, i) => {
     const playoffStart = lg.settings?.playoff_week_start || 15;
     const regWeeks = Math.min(playoffStart - 1, 17);
-    const weeks = Array.from({length: regWeeks}, (_,i) => i+1);
+    const weeks = Array.from({length: regWeeks}, (_,k) => k+1);
+    const sid = lg.league_id;
+    // Past seasons are immutable — cache forever (24h TTL is fine)
+    // Current season: short TTL so live data stays fresh
+    const isPast = parseInt(lg.season) < now;
+    const seasonTtl = isPast ? CACHE_TTL.season * 48 : CACHE_TTL.season; // 24h past, 30m current
+    const ckey = (suffix) => `sc_season_${sid}_${suffix}`;
 
-    // Fetch everything for this season in one parallel batch
-    const [users, rosters, weekData, txnData] = await Promise.all([
-      fetchJ(`${API}/league/${lg.league_id}/users`),
-      fetchJ(`${API}/league/${lg.league_id}/rosters`),
+    const [users, rosters, weekData, txnData, bracket] = await Promise.all([
+      fetchCached(`${API}/league/${sid}/users`,   ckey('users')),
+      fetchCached(`${API}/league/${sid}/rosters`, ckey('rosters')),
       Promise.all(weeks.map(w =>
-        fetchJ(`${API}/league/${lg.league_id}/matchups/${w}`)
+        fetchCached(`${API}/league/${sid}/matchups/${w}`, ckey(`mu${w}`))
           .then(d => ({w, d})).catch(() => ({w, d:[]}))
       )),
       Promise.all(weeks.map(w =>
-        fetchJ(`${API}/league/${lg.league_id}/transactions/${w}`)
-          .then(d => d).catch(() => [])
+        fetchCached(`${API}/league/${sid}/transactions/${w}`, ckey(`tx${w}`))
+          .catch(() => [])
       )),
+      fetchCached(`${API}/league/${sid}/winners_bracket`, ckey('bracket')).catch(() => []),
     ]);
 
     const matchupsByWeek = {};
     for (const {w, d} of weekData) matchupsByWeek[w] = d;
     const transactions = txnData.flat();
+    return { lg, users, rosters, matchupsByWeek, transactions, bracket };
+  });
 
-    let bracket = [];
-    try { bracket = await fetchJ(`${API}/league/${lg.league_id}/winners_bracket`); } catch {}
+  // Show incremental progress as seasons resolve
+  let done = 0;
+  const allData = await Promise.all(seasonPromises.map(p =>
+    p.then(r => { done++; showLoading(`Loaded ${done}/${leagues.length} seasons...`, 12 + Math.round((done/leagues.length)*68)); return r; })
+  ));
 
-    allData.push({ lg, users, rosters, matchupsByWeek, transactions, bracket });
-  }
-
-  showLoading('Loading NFL player names...', 85);
+  // ── Step 3: Player database — localStorage with 24h TTL ─────────────────
+  showLoading('Loading player names...', 82);
   let playerMap = {};
   try {
-    const cacheKey = 'sleeper_players_v4';
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      playerMap = JSON.parse(cached);
+    const pCacheKey = 'sc_players_v5';
+    const cachedPlayers = lsGet(pCacheKey);
+    if (cachedPlayers) {
+      playerMap = cachedPlayers;
     } else {
-      showLoading('Loading NFL player database (one-time, ~5MB)...', 87);
+      showLoading('Downloading player database (one-time ~5MB)...', 84);
       const players = await fetchJ(`${API}/players/nfl`);
       for (const [id, p] of Object.entries(players)) {
         if (p.full_name || p.first_name) {
@@ -1052,14 +1148,15 @@ async function loadAll(startId) {
           };
         }
       }
-      try { localStorage.setItem(cacheKey, JSON.stringify(playerMap)); } catch {}
+      lsSet(pCacheKey, playerMap);
     }
   } catch(e) {
     console.warn('Player names unavailable, continuing without them:', e);
   }
 
+  // ── Step 4: Compute — yield to browser first so progress bar renders ─────
   showLoading('Computing stats...', 95);
-  await new Promise(r => setTimeout(r, 30));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   dashData = computeStats(allData, leagueName, playerMap);
   dashData._leagueId = startId;
   renderDashboard();
@@ -1345,10 +1442,24 @@ function renderDashboard() {
     const appEl = document.getElementById('app');
     appEl.parentNode.insertBefore(nav, appEl);
   }
+  // Count cached keys to show cache status
+  const cacheCount = Object.keys(localStorage).filter(k=>k.startsWith('sc_')).length;
+  const cacheLabel = cacheCount > 0 ? `⚡ cached` : `🌐 live`;
+
   nav.innerHTML = `<div class="nav-inner">
     <span class="nav-logo">DUDFL</span>
     ${tabs.map(t=>`<button class="tab${t===currentTab?' active':''}" data-tab="${t}">${tabLabels[t]}</button>`).join('')}
+    <span class="nav-spacer"></span>
+    <button class="nav-change" id="nav-refresh" title="Force refresh all data" style="margin-right:6px;font-size:9px">↺ refresh</button>
+    <button class="nav-change" onclick="showSetup(dashData?._leagueId||'')">⚙ league</button>
   </div>`;
+
+  // Refresh button — clears cache and reloads
+  document.getElementById('nav-refresh').onclick = () => {
+    if (!confirm('Clear cached data and reload fresh from Sleeper?')) return;
+    Object.keys(localStorage).filter(k=>k.startsWith('sc_')).forEach(k=>localStorage.removeItem(k));
+    loadAll(dashData._leagueId).catch(()=>{});
+  };
 
   app.innerHTML = `<div class="tab-content-inner" id="tab-content"></div>
     <div class="footer">Stats follow the person, not the franchise slot &mdash; ownership tracked via Sleeper owner_id per season</div>`;
@@ -1404,68 +1515,195 @@ function lbCard(title, arr, valFn, subFn) {
 }
 
 function tabOverview() {
-  const {managers,totalGames,avgScore,seasons,allMatchups} = dashData;
+  const {managers,totalGames,avgScore,seasons,allMatchups,champRosters,highGame,closestGame,blowout,seasonSummaries,lastSeason} = dashData;
   const topChamp = [...managers].sort((a,b)=>b.championships-a.championships)[0];
   const topPPG = [...managers].sort((a,b)=>(b.pf/(b.wins+b.losses||1))-(a.pf/(a.wins+a.losses||1)))[0];
+  const mostWins = managers[0];
   const totalPts = allMatchups.reduce((s,m)=>s+m.sA+m.sB,0);
-  const maxWR = managers[0] ? managers[0].wins/(managers[0].wins+managers[0].losses||1) : 1;
+
+  // Win rate bar max
+  const maxWR = managers.reduce((mx,m)=>Math.max(mx,m.wins/(m.wins+m.losses||1)),0) || 1;
+
+  // Current season stats
+  const curSeason = seasonSummaries.find(s=>s.season===lastSeason);
+  const curStandings = curSeason ? [...curSeason.managers].sort((a,b)=>b.wins-a.wins||b.pf-a.pf) : [];
+
+  // Longest all-time win streak per manager
+  function longestStreak(m) {
+    let best=0, cur=0;
+    const sorted = [...m.weeklyScores].sort((a,b)=>a.season-b.season||a.week-b.week);
+    // use h2h results instead — iterate allMatchups sorted
+    const results = allMatchups
+      .filter(mu=>mu.oA===m.ownerId||mu.oB===m.ownerId)
+      .sort((a,b)=>a.season-b.season||a.week-b.week)
+      .map(mu=>mu.oA===m.ownerId ? (mu.sA>mu.sB?'W':'L') : (mu.sB>mu.sA?'W':'L'));
+    for (const r of results) { cur = r==='W' ? cur+1 : 0; best=Math.max(best,cur); }
+    return best;
+  }
+  const streakData = managers.map(m=>({...m, streak:longestStreak(m)})).sort((a,b)=>b.streak-a.streak);
+  const topStreak = streakData[0];
+
+  // Points scored in a single game (highest individual score ever)
+  const topSingleScore = allMatchups.reduce((best,mu)=>{
+    if(mu.sA>best.score) best={score:mu.sA,name:mu.nA,season:mu.season,week:mu.week};
+    if(mu.sB>best.score) best={score:mu.sB,name:mu.nB,season:mu.season,week:mu.week};
+    return best;
+  },{score:0,name:'',season:'',week:0});
+
+  // Reigning champ
+  const reigningChamp = champRosters.length ? champRosters[champRosters.length-1] : null;
+
+  // Per-season champion list (last 5)
+  const recentChamps = champRosters.slice().reverse().slice(0,5);
+
+  // Fun facts
+  const totalTrades = allMatchups.length; // placeholder — we'll use allMatchups count
+  const avgPPG = totalPts / (totalGames*2||1);
 
   return `
+    <!-- ── LEAGUE VITALS ── -->
     <div class="section-label">League at a glance</div>
     <div class="metrics">
       <div class="metric">
-        <div class="metric-label">Seasons</div>
+        <div class="metric-label">Seasons played</div>
         <div class="metric-value">${seasons.length}</div>
         <div class="metric-sub">${seasons[0]} &ndash; ${seasons[seasons.length-1]}</div>
       </div>
       <div class="metric">
         <div class="metric-label">Games played</div>
         <div class="metric-value">${fmtInt(totalGames)}</div>
-        <div class="metric-sub">regular season</div>
+        <div class="metric-sub">all-time matchups</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Avg score</div>
-        <div class="metric-value">${fmt(avgScore,1)}</div>
-        <div class="metric-sub">per team / week</div>
-      </div>
-      <div class="metric">
-        <div class="metric-label">Total pts scored</div>
+        <div class="metric-label">Points scored</div>
         <div class="metric-value">${(totalPts/1000).toFixed(1)}K</div>
-        <div class="metric-sub">all time</div>
+        <div class="metric-sub">league all-time total</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg score/week</div>
+        <div class="metric-value">${fmt(avgScore,1)}</div>
+        <div class="metric-sub">per team per game</div>
       </div>
       <div class="metric">
         <div class="metric-label">Most titles</div>
-        <div class="metric-value">${topChamp?.championships||0}</div>
-        <div class="metric-sub">${topChamp?.name.split(' ')[0]||'—'}</div>
+        <div class="metric-value">${topChamp?.championships||0}×</div>
+        <div class="metric-sub">${topChamp?.name||'—'}</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Top scorer</div>
+        <div class="metric-label">Top PPG all-time</div>
         <div class="metric-value">${fmt((topPPG?.pf||0)/(topPPG?.wins+topPPG?.losses||1),1)}</div>
-        <div class="metric-sub">${topPPG?.name.split(' ')[0]||'—'} PPG</div>
+        <div class="metric-sub">${topPPG?.name||'—'}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Highest score ever</div>
+        <div class="metric-value">${fmt(topSingleScore.score,1)}</div>
+        <div class="metric-sub">${topSingleScore.name.split(' ').pop()} · ${topSingleScore.season} Wk${topSingleScore.week}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Longest win streak</div>
+        <div class="metric-value">${topStreak?.streak||0}W</div>
+        <div class="metric-sub">${topStreak?.name||'—'} all-time</div>
       </div>
     </div>
 
+    <!-- ── REIGNING CHAMP BANNER ── -->
+    ${reigningChamp ? `
+    <div class="section-label">Reigning champion</div>
+    <div class="card-solo" style="background:linear-gradient(135deg,rgba(240,180,41,0.08) 0%,var(--dark2) 60%);border:1px solid rgba(240,180,41,0.2);border-radius:var(--radius-lg);padding:1.25rem 1.5rem">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="position:relative;flex-shrink:0">
+          ${av(reigningChamp.ownerName, Object.keys(dashData.userMap||{}).find(k=>dashData.userMap[k]===reigningChamp.ownerName)||reigningChamp.ownerName, 52)}
+          <span style="position:absolute;bottom:-4px;right:-4px;font-size:18px;line-height:1">🏆</span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--font-display);font-size:26px;font-weight:900;font-style:italic;color:var(--gold);text-transform:uppercase;letter-spacing:0.02em;line-height:1">${reigningChamp.ownerName}</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-top:4px">${reigningChamp.season} Champion</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">Title history</div>
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">
+            ${recentChamps.map(c=>`<div style="font-family:var(--font-mono);font-size:10px;color:${c.season===reigningChamp.season?'var(--gold)':'var(--text3)'};white-space:nowrap">${c.season === reigningChamp.season ? '🏆' : '·'} ${c.season} — ${c.ownerName.split(' ')[0]}</div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- ── CURRENT SEASON SNAPSHOT ── -->
+    ${curStandings.length ? `
+    <div class="section-label">${lastSeason} season — current standings</div>
+    <div class="card-solo" style="padding:0;overflow:hidden">
+      ${curStandings.map((m,i)=>{
+        const g = m.wins+m.losses||1;
+        const pct = m.wins/g;
+        const [bg,fg] = colorFor(m.oid);
+        const ownerId = Object.keys(dashData.userMap||{}).find(k=>dashData.userMap[k]===m.name)||m.oid;
+        const isLeader = i===0;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 1.25rem;border-bottom:1px solid var(--border);${isLeader?'background:rgba(240,180,41,0.04)':''}">
+          <span style="font-family:var(--font-mono);font-size:11px;color:${isLeader?'var(--gold)':'var(--text3)'};min-width:18px;text-align:center">${i+1}</span>
+          ${av(m.name, ownerId, 28)}
+          <span style="font-size:13px;font-weight:${isLeader?'600':'400'};color:${isLeader?'var(--text)':'var(--text2)'};flex:1;padding-left:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name}</span>
+          <div style="flex:1;max-width:120px;height:4px;background:var(--dark4);border-radius:2px;overflow:hidden;margin:0 8px">
+            <div style="height:4px;border-radius:2px;width:${(pct*100).toFixed(0)}%;background:${isLeader?'var(--gold)':pct>=0.5?'var(--green)':'var(--red)'}"></div>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);min-width:36px;text-align:right;white-space:nowrap">${m.wins}–${m.losses}</span>
+          <span style="font-family:var(--font-display);font-size:16px;font-weight:700;color:${isLeader?'var(--gold)':'var(--text)'};min-width:52px;text-align:right">${fmt(m.pf,1)}</span>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <!-- ── ALL-TIME STANDINGS ── -->
     <div class="section-label">All-time standings</div>
-    <div class="card-solo">
-      <div style="display:grid;grid-template-columns:24px 32px 1fr auto auto;gap:0;align-items:center;padding:0 0 8px;border-bottom:1px solid var(--border);margin-bottom:2px">
+    <div class="card-solo" style="padding:0;overflow:hidden">
+      <div style="display:grid;grid-template-columns:24px 32px 1fr 80px auto auto;gap:0;align-items:center;padding:8px 1.25rem;border-bottom:1px solid var(--border);background:var(--dark3)">
         <span></span><span></span>
         <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;padding-left:8px">Manager</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase">Win rate</span>
         <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;text-align:right;padding-right:8px">W–L</span>
         <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;text-align:right;min-width:48px">PPG</span>
       </div>
       ${managers.map((m,i)=>{
         const g=m.wins+m.losses||1, wr=m.wins/g;
         const ppg = m.pf/g;
+        const streak = streakData.find(s=>s.ownerId===m.ownerId)?.streak||0;
         const champ=m.championships>0?`<span class="champ-badge">${m.championships}× champ</span>`:'';
         const rankSymbol = i===0?'①':i===1?'②':i===2?'③':`${i+1}`;
-        return `<div style="display:grid;grid-template-columns:24px 32px 1fr auto auto;gap:0;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
-          <span class="rank ${i===0?'gold':i===1?'silver':''}" style="font-size:13px">${rankSymbol}</span>
-          ${av(m.name,m.ownerId,26)}
-          <span style="font-size:13px;font-weight:500;color:var(--text);padding-left:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0">${m.name}${champ}</span>
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:right;padding:0 8px;white-space:nowrap">${m.wins}–${m.losses}&nbsp;<span style="color:${i===0?'var(--gold)':'var(--text3)'};font-size:10px">${(wr*100).toFixed(0)}%</span></span>
-          <span style="font-family:var(--font-display);font-size:18px;font-weight:700;color:${i===0?'var(--gold)':'var(--text)'};text-align:right;min-width:48px">${ppg.toFixed(1)}</span>
+        const isTop = i===0;
+        return `<div style="display:grid;grid-template-columns:24px 32px 1fr 80px auto auto;gap:0;align-items:center;padding:10px 1.25rem;border-bottom:1px solid var(--border);${isTop?'background:rgba(240,180,41,0.04)':''}">
+          <span class="rank ${isTop?'gold':i===1?'silver':''}" style="font-size:13px">${rankSymbol}</span>
+          ${av(m.name,m.ownerId,28)}
+          <div style="padding-left:8px;min-width:0">
+            <div style="font-size:13px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap">${m.name}${champ}</div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);margin-top:2px">${m.seasons} season${m.seasons!==1?'s':''} · ${streak}W best streak</div>
+          </div>
+          <div style="padding-right:8px">
+            <div style="height:4px;background:var(--dark4);border-radius:2px;overflow:hidden;margin-bottom:3px">
+              <div style="height:4px;border-radius:2px;width:${(wr/maxWR*100).toFixed(0)}%;background:${isTop?'var(--gold)':wr>=0.5?'var(--green)':'var(--red)'}"></div>
+            </div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3)">${(wr*100).toFixed(0)}%</div>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:right;padding:0 8px;white-space:nowrap" class="std-wl">${m.wins}–${m.losses}</span>
+          <span style="font-family:var(--font-display);font-size:18px;font-weight:700;color:${isTop?'var(--gold)':'var(--text)'};text-align:right;min-width:40px" class="std-ppg">${ppg.toFixed(1)}</span>
         </div>`;
       }).join('')}
+    </div>
+
+    <!-- ── MOMENTS ── -->
+    <div class="section-label">All-time moments</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
+      ${[
+        highGame ? {icon:'🚀',label:'Highest score ever',val:fmt(Math.max(highGame.sA,highGame.sB)),sub:`${highGame.sA>highGame.sB?highGame.nA:highGame.nB} · ${highGame.season} Wk${highGame.week}`} : null,
+        closestGame ? {icon:'😬',label:'Closest game ever',val:`+${fmt(closestGame.diff)}`,sub:`${closestGame.nA} vs ${closestGame.nB} · ${closestGame.season} Wk${closestGame.week}`} : null,
+        blowout ? {icon:'💥',label:'Biggest blowout',val:`+${fmt(blowout.diff)}`,sub:`${blowout.sA>blowout.sB?blowout.nA:blowout.nB} def. ${blowout.sA>blowout.sB?blowout.nB:blowout.nA} · ${blowout.season} Wk${blowout.week}`} : null,
+        topStreak ? {icon:'🔥',label:'Longest win streak',val:`${topStreak.streak}W`,sub:`${topStreak.name} all-time`} : null,
+      ].filter(Boolean).map(card=>`
+        <div style="background:var(--dark2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.125rem;display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:22px;line-height:1;flex-shrink:0;margin-top:2px">${card.icon}</span>
+          <div style="min-width:0">
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:4px">${card.label}</div>
+            <div style="font-family:var(--font-display);font-size:24px;font-weight:800;font-style:italic;color:var(--gold);line-height:1;margin-bottom:4px">${card.val}</div>
+            <div style="font-size:11px;color:var(--text2)">${card.sub}</div>
+          </div>
+        </div>`).join('')}
     </div>`;
 }
 function tabLeaderboards() {
