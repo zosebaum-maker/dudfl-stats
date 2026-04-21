@@ -2175,8 +2175,13 @@ function tabChampions() {
     </div>`;
 }
 
-// ── CONTRACT DATA ──
-const CONTRACT_LIST = [
+// ── GOOGLE SHEETS BACKEND ──
+// When you're ready to connect Google Sheets, replace the URL below with your
+// deployed Apps Script URL. Until then the site uses the hardcoded data below.
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzP1kpojsaXLzXcXHyakDTG5a9VqK09rhlWkSgXj8J8coHGQc6OsGv-DNd61lPL6YruqQ/exec';
+
+// ── CONTRACT DATA (fallback / source of truth until sheet is connected) ──
+let CONTRACT_LIST = [
   {s:12,n:'Patrick Mahomes',y:2,t:3,ro:false},{s:9,n:'Lamar Jackson',y:2,t:3,ro:false},{s:1,n:'Michael Penix Jr.',y:2,t:3,ro:true},{s:6,n:'Justin Herbert',y:3,t:3,ro:false},{s:3,n:'Jayden Daniels',y:2,t:3,ro:true},{s:4,n:'Brock Purdy',y:3,t:3,ro:false},{s:1,n:'Baker Mayfield',y:2,t:3,ro:false},{s:12,n:'Jalen Hurts',y:3,t:3,ro:false},{s:8,n:'Joe Burrow',y:3,t:3,ro:false},{s:1,n:'CJ Stroud',y:3,t:3,ro:true},{s:13,n:'Josh Allen',y:3,t:3,ro:false,hint:'QB'},{s:1,n:'Bo Nix',y:2,t:3,ro:true},
   {s:21,n:'Davante Adams',y:2,t:3,ro:false},{s:6,n:'Kyler Murray',y:1,t:1,ro:false},{s:2,n:'Devon Achane',y:3,t:3,ro:true},{s:6,n:'Malik Nabers',y:2,t:3,ro:true},{s:1,n:'Drake Maye',y:2,t:3,ro:true,hint:'QB'},{s:2,n:'Tua Tagovailoa',y:2,t:3,ro:false},{s:5,n:'Jordan Love',y:2,t:3,ro:false},{s:6,n:'Dak Prescott',y:3,t:3,ro:false},{s:2,n:'Trevor Lawrence',y:2,t:3,ro:false},{s:3,n:'Justin Fields',y:1,t:3,ro:false},{s:15,n:'Josh Jacobs',y:2,t:3,ro:false},{s:3,n:'Jared Goff',y:2,t:3,ro:false},
   {s:5,n:'Brian Robinson',y:1,t:3,ro:false},{s:7,n:'Javonte Williams',y:2,t:2,ro:false},{s:1,n:'Jaylen Wright',y:2,t:3,ro:true},{s:30,n:'Jamarr Chase',y:1,t:3,ro:false},{s:1,n:'JJ McCarthy',y:2,t:3,ro:true},{s:30,n:'Christian McCaffrey',y:2,t:3,ro:false},{s:4,n:'TJ Hockenson',y:1,t:3,ro:false},{s:9,n:'Devonta Smith',y:2,t:3,ro:false},{s:2,n:'Caleb Williams',y:2,t:3,ro:true},{s:1,n:'Darnell Washington',y:3,t:3,ro:true},{s:9,n:'Mike Evans',y:3,t:3,ro:false},{s:1,n:'Adonai Mitchell',y:2,t:3,ro:true},
@@ -2204,10 +2209,8 @@ const CONTRACT_LIST = [
   {s:1,n:'Jarquez Hunter',y:1,t:3,ro:false},
 ];
 
-// ── CAP PENALTIES / BONUSES ──
-// Positive = counts AGAINST the cap. Negative = team GAINS cap space.
-// Items with year:2027 are deferred and excluded from current-year totals.
-const CAP_ADJUSTMENTS = {
+// ── CAP ADJUSTMENTS (fallback until sheet is connected) ──
+let _capAdjustments = {
   'jpeezy88': [
     { amount: -1, note: 'Carry over' },
     { amount: -1, note: 'From Brad' },
@@ -2229,7 +2232,7 @@ const CAP_ADJUSTMENTS = {
     { amount: 2,  note: 'Tanking' },
     { amount: 3,  note: 'Mixon' },
     { amount: 14, note: 'To John' },
-    { amount: 2,  note: 'Mixon', year: 2027 }, // deferred — does not count this year
+    { amount: 2,  note: 'Mixon', year: 2027 },
   ],
   'cmurdaakathetruth': [
     { amount: -4, note: 'From Brad' },
@@ -2252,27 +2255,61 @@ const CAP_ADJUSTMENTS = {
   ],
 };
 
-// ── CAP_ADJUSTMENTS LOOKUP BY OWNER NAME (display name) ──
-// Maps the Sleeper display name -> adjustments
-const CAP_ADJ_BY_OWNER = {};
-for (const [key, adjs] of Object.entries(CAP_ADJUSTMENTS)) {
-  CAP_ADJ_BY_OWNER[key.toLowerCase()] = adjs;
+let _sheetLoaded = false;
+let _sheetPromise = null;
+const SHEET_CACHE_KEY = 'sc_sheet_v1';
+const SHEET_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Apply sheet data immediately from cache if available
+try {
+  const cached = localStorage.getItem(SHEET_CACHE_KEY);
+  if (cached) {
+    const { ts, contracts, capAdjustments } = JSON.parse(cached);
+    if (Date.now() - ts < SHEET_CACHE_TTL) {
+      if (contracts && contracts.length > 0) CONTRACT_LIST = contracts;
+      if (capAdjustments && Object.keys(capAdjustments).length > 0) _capAdjustments = capAdjustments;
+      _sheetLoaded = true;
+    }
+  }
+} catch(e) {}
+
+// Kick off the sheet fetch immediately in the background on page load
+function _startSheetFetch() {
+  if (!SHEET_URL || SHEET_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
+  _sheetPromise = fetch(SHEET_URL)
+    .then(r => r.json())
+    .then(data => {
+      if (data.contracts && data.contracts.length > 0) CONTRACT_LIST = data.contracts;
+      if (data.capAdjustments && Object.keys(data.capAdjustments).length > 0) _capAdjustments = data.capAdjustments;
+      _sheetLoaded = true;
+      try {
+        localStorage.setItem(SHEET_CACHE_KEY, JSON.stringify({
+          ts: Date.now(),
+          contracts: CONTRACT_LIST,
+          capAdjustments: _capAdjustments,
+        }));
+      } catch(e) {}
+    })
+    .catch(e => console.warn('Sheet fetch failed, using hardcoded data:', e));
+}
+_startSheetFetch();
+
+async function loadSheetData() {
+  if (_sheetLoaded) return;
+  if (_sheetPromise) await _sheetPromise;
 }
 
 function getCapAdjustments(ownerName) {
   if (!ownerName) return [];
   const key = ownerName.toLowerCase().replace(/\s+/g,'');
-  for (const [k, adjs] of Object.entries(CAP_ADJ_BY_OWNER)) {
-    if (key === k.replace(/\s+/g,'') || ownerName.toLowerCase().includes(k) || k.includes(ownerName.toLowerCase())) {
-      return adjs;
-    }
+  for (const [k, adjs] of Object.entries(_capAdjustments)) {
+    const kn = k.toLowerCase().replace(/\s+/g,'');
+    if (key === kn || key.includes(kn) || kn.includes(key)) return adjs;
   }
-  // Also try partial match on the original owner string
   const ownerLower = ownerName.toLowerCase();
-  for (const [k, adjs] of Object.entries(CAP_ADJ_BY_OWNER)) {
-    if (ownerLower.startsWith(k.slice(0,6)) || k.startsWith(ownerLower.slice(0,6))) {
-      return adjs;
-    }
+  for (const [k, adjs] of Object.entries(_capAdjustments)) {
+    const kl = k.toLowerCase();
+    if (ownerLower.startsWith(kl.slice(0,6)) || kl.startsWith(ownerLower.slice(0,6))) return adjs;
   }
   return [];
 }
@@ -2410,6 +2447,20 @@ function tabSalaries() {
       <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase">Loading roster assignments...</span>
     </div>`;
     try {
+      await loadSheetData();
+      // Refresh metrics with live sheet data
+      const totalCap2 = CONTRACT_LIST.reduce((s,c)=>s+c.s,0);
+      const expiring2 = CONTRACT_LIST.filter(c=>c.y===c.t).length;
+      const rookieOptions2 = CONTRACT_LIST.filter(c=>c.ro).length;
+      const topContract2 = [...CONTRACT_LIST].sort((a,b)=>b.s-a.s)[0];
+      const m1 = document.getElementById('sal-m-1'); if(m1) m1.textContent='$'+totalCap2;
+      const m2 = document.getElementById('sal-m-2'); if(m2) m2.textContent=CONTRACT_LIST.length;
+      const m3 = document.getElementById('sal-m-3'); if(m3) m3.textContent=expiring2;
+      const m4 = document.getElementById('sal-m-4'); if(m4) m4.textContent=rookieOptions2;
+      if(topContract2){
+        const m5v = document.getElementById('sal-m-5v'); if(m5v) m5v.textContent='$'+topContract2.s;
+        const m5s = document.getElementById('sal-m-5s'); if(m5s) m5s.textContent=topContract2.n;
+      }
       const data = await loadSalaryData();
       renderSalaryContent(data);
     } catch(e) {
@@ -2425,11 +2476,11 @@ function tabSalaries() {
   return `
     <div class="section-label">League salary cap</div>
     <div class="metrics">
-      <div class="metric"><div class="metric-label">Total committed</div><div class="metric-value">$${totalCap}</div><div class="metric-sub">across all rosters</div></div>
-      <div class="metric"><div class="metric-label">Total contracts</div><div class="metric-value">${CONTRACT_LIST.length}</div><div class="metric-sub">active players</div></div>
-      <div class="metric"><div class="metric-label">Expiring</div><div class="metric-value">${expiring}</div><div class="metric-sub">after this season</div></div>
-      <div class="metric"><div class="metric-label">Rookie options</div><div class="metric-value">${rookieOptions}</div><div class="metric-sub">RO contracts</div></div>
-      <div class="metric"><div class="metric-label">Biggest contract</div><div class="metric-value">$${topContract.s}</div><div class="metric-sub">${topContract.n}</div></div>
+      <div class="metric"><div class="metric-label">Total committed</div><div class="metric-value" id="sal-m-1">$${totalCap}</div><div class="metric-sub">across all rosters</div></div>
+      <div class="metric"><div class="metric-label">Total contracts</div><div class="metric-value" id="sal-m-2">${CONTRACT_LIST.length}</div><div class="metric-sub">active players</div></div>
+      <div class="metric"><div class="metric-label">Expiring</div><div class="metric-value" id="sal-m-3">${expiring}</div><div class="metric-sub">after this season</div></div>
+      <div class="metric"><div class="metric-label">Rookie options</div><div class="metric-value" id="sal-m-4">${rookieOptions}</div><div class="metric-sub">RO contracts</div></div>
+      <div class="metric"><div class="metric-label">Biggest contract</div><div class="metric-value" id="sal-m-5v">$${topContract.s}</div><div class="metric-sub" id="sal-m-5s">${topContract.n}</div></div>
     </div>
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1.75rem;margin-bottom:1rem;align-items:center">
