@@ -2196,9 +2196,9 @@ const CONTRACT_LIST = [
   {s:1,n:'Michael Mayer',y:3,t:3,ro:true},{s:7,n:'George Pickens',y:1,t:3,ro:false},{s:4,n:'Elijah Arroyo',y:1,t:2,ro:false},{s:43,n:'Derrick Henry',y:1,t:1,ro:false},{s:4,n:'Austin Ekeler',y:1,t:1,ro:false},{s:2,n:'Zay Flowers',y:3,t:3,ro:true},{s:1,n:'Dyami Brown',y:1,t:2,ro:false},{s:1,n:'Shedeur Sanders',y:1,t:2,ro:false},{s:1,n:'Luther Burden',y:1,t:3,ro:true},{s:1,n:'Romeo Doubs',y:2,t:3,ro:false},{s:1,n:'Daniel Jones',y:1,t:2,ro:false},
   {s:4,n:'Kenneth Walker',y:1,t:1,ro:false},{s:3,n:'Brenton Strange',y:1,t:2,ro:false},{s:1,n:'Alec Pierce',y:1,t:3,ro:false},{s:1,n:'Kareem Hunt',y:1,t:1,ro:false},{s:2,n:'Andre Iosivas',y:1,t:2,ro:false,hint:'WR'},{s:1,n:'Devin Neal',y:1,t:3,ro:true},{s:1,n:'Noah Gray',y:1,t:2,ro:false},{s:1,n:'Jaylin Noel',y:1,t:3,ro:true},{s:1,n:'Jordan Mason',y:2,t:3,ro:false},{s:1,n:'Theo Johnson',y:2,t:3,ro:false},
   {s:1,n:'Rashee Rice',y:3,t:3,ro:true},{s:1,n:'Gunnar Helm',y:1,t:2,ro:false},{s:2,n:'Zach Ertz',y:1,t:1,ro:false},{s:1,n:'Chris Rodriguez',y:1,t:2,ro:false},{s:1,n:'Terrance Ferguson',y:1,t:3,ro:true},{s:1,n:'Jalen Coker',y:1,t:2,ro:false},{s:1,n:'Kyle Williams',y:1,t:3,ro:true},{s:1,n:'Kyle Monangai',y:1,t:3,ro:true},{s:1,n:'WanDale Robinson',y:1,t:3,ro:false},
-  {s:6,n:'Tony Pollard',y:1,t:3,ro:false},{s:6,n:'Kaleb Johnson',y:1,t:3,ro:true,hint:'RB'},{s:1,n:'Cedric Tillman',y:1,t:2,ro:false},{s:7,n:'DeAndre Swift',y:3,t:3,ro:false,hint:'RB'},{s:6,n:'Jaylen Warren',y:2,t:3,ro:false},
+  {s:6,n:'Tony Pollard',y:1,t:3,ro:false},{s:6,n:'Kaleb Johnson',y:1,t:3,ro:true,hint:'RB'},{s:1,n:'Cedric Tillman',y:1,t:2,ro:false},{s:7,n:"D'Andre Swift",y:3,t:3,ro:false,hint:'RB'},{s:6,n:'Jaylen Warren',y:2,t:3,ro:false},
   {s:1,n:'Jordan James',y:1,t:3,ro:true},{s:14,n:'James Conner',y:1,t:1,ro:false},{s:1,n:'Jaydon Blue',y:1,t:3,ro:true},{s:1,n:'Tyler Shough',y:1,t:3,ro:false},
-  {s:1,n:'DJ Giddens',y:1,t:3,ro:true,hint:'RB'},{s:4,n:'Najee Harris',y:1,t:3,ro:false},{s:1,n:'Keandre Lambert-Smith',y:1,t:2,ro:false},{s:3,n:'Xavier Worthy',y:2,t:3,ro:true},
+  {s:1,n:'DJ Giddens',y:1,t:3,ro:true,hint:'RB'},{s:4,n:'Najee Harris',y:1,t:3,ro:false},{s:1,n:"Ke'Andrae Lambert-Smith",y:1,t:2,ro:false},{s:3,n:'Xavier Worthy',y:2,t:3,ro:true},
   {s:4,n:'Travis Kelce',y:1,t:3,ro:false},{s:3,n:'Rico Dowdle',y:1,t:1,ro:false},
   {s:3,n:'Elic Ayomanor',y:1,t:3,ro:false},
   {s:1,n:'Jarquez Hunter',y:1,t:3,ro:false},
@@ -2280,9 +2280,10 @@ function getCapAdjustments(ownerName) {
 // Normalize name for fuzzy matching
 function normName(n) {
   return n.toLowerCase()
-    .replace(/\bjr\.?\b|\bsr\.?\b|\bii\b|\biii\b/g, '')
-    .replace(/[^a-z ]/g, '')
-    .replace(/\s+/g,' ')
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\bjr\.?\b|\bsr\.?\b|\bii\b|\biii\b/g, "")
+    .replace(/[^a-z ]/g, "")
+    .replace(/\s+/g," ")
     .trim();
 }
 
