@@ -1500,6 +1500,136 @@ function lbCard(title, arr, valFn, subFn) {
   </div>`;
 }
 
+// ── 2026 ROOKIE DRAFT RECAP ──────────────────────────────────────────────
+// Pulled from the Sleeper API (league 1313934632156147712, draft
+// 1313934632160329728) — 3 rounds, 12 teams, completed Aug 16, 2026.
+const DRAFT_RECAP = {
+  season: "2026",
+  label: "Rookie Draft",
+  dateStr: "Aug 16, 2026",
+  rounds: 3,
+  teams: 12,
+  totalPicks: 36,
+  zeroPickTeams: ["Little Buff Boys", "Ky-Win Williams"],
+  picks: [
+    {no:1,round:1,team:"Weed Warriors",player:"Jeremiyah Love",pos:"RB",nfl:"ARI"},
+    {no:2,round:1,team:"Let's Go, Bradley!!!!",player:"Carnell Tate",pos:"WR",nfl:"TEN"},
+    {no:3,round:1,team:"Let's Go, Bradley!!!!",player:"Jordyn Tyson",pos:"WR",nfl:"NO"},
+    {no:4,round:1,team:"Fuck Tim Couch",player:"Makai Lemon",pos:"WR",nfl:"PHI"},
+    {no:5,round:1,team:"YeYe",player:"Jadarian Price",pos:"RB",nfl:"SEA"},
+    {no:6,round:1,team:"Weed Warriors",player:"Fernando Mendoza",pos:"QB",nfl:"LV"},
+    {no:7,round:1,team:"Fuck Tim Couch",player:"Kenyon Sadiq",pos:"TE",nfl:"NYJ"},
+    {no:8,round:1,team:"Let's Go, Bradley!!!!",player:"KC Concepcion",pos:"WR",nfl:"CLE"},
+    {no:9,round:1,team:"JBOYCOTT89",player:"Jonah Coleman",pos:"RB",nfl:"DEN"},
+    {no:10,round:1,team:"Weed Warriors",player:"De'Zhaun Stribling",pos:"WR",nfl:"SF"},
+    {no:11,round:1,team:"Fuck Tim Couch",player:"Denzel Boston",pos:"WR",nfl:"CLE"},
+    {no:12,round:1,team:"YeYe",player:"Omar Cooper",pos:"WR",nfl:"NYJ"},
+    {no:13,round:2,team:"YeYe",player:"Ja'Kobi Lane",pos:"WR",nfl:"BAL"},
+    {no:14,round:2,team:"I dream of pis'real",player:"Eli Stowers",pos:"TE",nfl:"PHI"},
+    {no:15,round:2,team:"John passingoutski?!?!?!?!",player:"Elijah Sarratt",pos:"WR",nfl:"BAL"},
+    {no:16,round:2,team:"Mahome Bois",player:"Emmett Johnson",pos:"RB",nfl:"KC"},
+    {no:17,round:2,team:"TMcLeod19",player:"Ty Simpson",pos:"QB",nfl:"LAR"},
+    {no:18,round:2,team:"John passingoutski?!?!?!?!",player:"Kaytron Allen",pos:"RB",nfl:"WAS"},
+    {no:19,round:2,team:"I dream of pis'real",player:"Antonio Williams",pos:"WR",nfl:"WAS"},
+    {no:20,round:2,team:"FannINTIFADA!",player:"Germie Bernard",pos:"WR",nfl:"PIT"},
+    {no:21,round:2,team:"JBOYCOTT89",player:"Chris Bell",pos:"WR",nfl:"MIA"},
+    {no:22,round:2,team:"Let's Go, Bradley!!!!",player:"Max Klare",pos:"TE",nfl:"LAR"},
+    {no:23,round:2,team:"John passingoutski?!?!?!?!",player:"Skyler Bell",pos:"WR",nfl:"BUF"},
+    {no:24,round:2,team:"JBOYCOTT89",player:"Mike Washington",pos:"RB",nfl:"LV"},
+    {no:25,round:3,team:"John passingoutski?!?!?!?!",player:"Malachi Fields",pos:"WR",nfl:"NYG"},
+    {no:26,round:3,team:"Let's Go, Bradley!!!!",player:"Eli Raridon",pos:"TE",nfl:"NE"},
+    {no:27,round:3,team:"Mahome Bois",player:"Adam Randall",pos:"RB",nfl:"BAL"},
+    {no:28,round:3,team:"FannINTIFADA!",player:"Zachariah Branch",pos:"WR",nfl:"ATL"},
+    {no:29,round:3,team:"YeYe",player:"Caleb Douglas",pos:"WR",nfl:"MIA"},
+    {no:30,round:3,team:"FannINTIFADA!",player:"Oscar Delp",pos:"TE",nfl:"NO"},
+    {no:31,round:3,team:"Weed Warriors",player:"Ted Hurst",pos:"WR",nfl:"TB"},
+    {no:32,round:3,team:"Weed Warriors",player:"Carson Beck",pos:"QB",nfl:"ARI"},
+    {no:33,round:3,team:"I dream of pis'real",player:"Chris Brazzell",pos:"WR",nfl:"CAR"},
+    {no:34,round:3,team:"YeYe",player:"Cyrus Allen",pos:"WR",nfl:"KC"},
+    {no:35,round:3,team:"FannINTIFADA!",player:"J'Mari Taylor",pos:"RB",nfl:"JAX"},
+    {no:36,round:3,team:"YeYe",player:"Kaelon Black",pos:"RB",nfl:"SF"},
+  ]
+};
+
+function renderDraftRecap() {
+  const d = DRAFT_RECAP;
+  const byTeam = {};
+  d.picks.forEach(p => {
+    byTeam[p.team] = byTeam[p.team] || {team:p.team, count:0, firsts:0};
+    byTeam[p.team].count++;
+    if (p.round === 1) byTeam[p.team].firsts++;
+  });
+  const teamList = Object.values(byTeam).sort((a,b)=>b.count-a.count);
+  const mostPicks = teamList[0];
+  const tripleFirsts = teamList.filter(t=>t.firsts>=3);
+  const posCounts = {};
+  d.picks.forEach(p => { posCounts[p.pos] = (posCounts[p.pos]||0)+1; });
+  const wrPct = Math.round((posCounts.WR||0)/d.totalPicks*100);
+  const lastQB = [...d.picks].reverse().find(p=>p.pos==='QB');
+  const otherStackers = tripleFirsts.filter(t=>t.team!==mostPicks.team).map(t=>t.team);
+  function joinList(arr) {
+    if (arr.length <= 1) return arr.join('');
+    if (arr.length === 2) return `${arr[0]} and ${arr[1]}`;
+    return `${arr.slice(0,-1).join(', ')}, and ${arr[arr.length-1]}`;
+  }
+  const roundsGrouped = [1,2,3].map(r => ({round:r, picks: d.picks.filter(p=>p.round===r)}));
+
+  return `
+    <div class="section-label">${d.season} ${d.label} recap</div>
+    <div class="card-solo" style="padding:1.25rem 1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase">${d.dateStr} · ${d.rounds} rounds · ${d.teams} teams · ${d.totalPicks} picks</div>
+        <span class="badge">Fresh off the board</span>
+      </div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:18px">
+        The ${d.season} rookie class is officially in the building, and draft capital landed wildly unevenly.
+        <strong style="color:var(--text)">${mostPicks.team}</strong> walked away with the deepest class of anyone,
+        cashing in ${mostPicks.count} total selections across all three rounds${otherStackers.length ? `, while ${joinList(otherStackers.map(t=>`<strong style="color:var(--text)">${t}</strong>`))} each stacked three first-rounders of their own` : ''}.
+        On the other end, ${joinList(d.zeroPickTeams.map(t=>`<strong style="color:var(--text)">${t}</strong>`))} sat the entire draft out —
+        every pick they owned had already been dealt away before Round 1 even started.
+        Wideouts ruled the board: ${posCounts.WR||0} of the ${d.totalPicks} picks (${wrPct}%) were receivers, against just
+        ${posCounts.RB||0} running backs, ${posCounts.TE||0} tight ends, and ${posCounts.QB||0} quarterbacks — the last QB off the board,
+        ${lastQB ? lastQB.player : '—'}, didn't come off the board until pick ${lastQB ? lastQB.no : '—'}.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div class="metric" style="padding:14px 16px">
+          <div class="metric-label">Deepest class</div>
+          <div class="metric-value" style="font-size:22px">${mostPicks.count} picks</div>
+          <div class="metric-sub">${mostPicks.team}</div>
+        </div>
+        <div class="metric" style="padding:14px 16px">
+          <div class="metric-label">Position of choice</div>
+          <div class="metric-value" style="font-size:22px">${posCounts.WR||0} WR</div>
+          <div class="metric-sub">${wrPct}% of all picks</div>
+        </div>
+        <div class="metric" style="padding:14px 16px">
+          <div class="metric-label">Sat it out</div>
+          <div class="metric-value" style="font-size:22px">0 picks</div>
+          <div class="metric-sub">${d.zeroPickTeams.join(' · ')}</div>
+        </div>
+        <div class="metric" style="padding:14px 16px">
+          <div class="metric-label">First off the board</div>
+          <div class="metric-value" style="font-size:22px">${d.picks[0].player}</div>
+          <div class="metric-sub">${d.picks[0].pos} · ${d.picks[0].team}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-solo" style="margin-top:1px">
+      <h3>Full draft board</h3>
+      ${roundsGrouped.map(rg => `
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.14em;color:var(--gold);text-transform:uppercase;margin:${rg.round===1?'0':'14px'} 0 4px">Round ${rg.round}</div>
+        ${rg.picks.map(p => `
+          <div class="lb-row">
+            <span class="rank">${p.no}</span>
+            ${posChipS(p.pos)}
+            <span class="lname">${p.player} <span style="color:var(--text3);font-weight:400">· ${p.nfl}</span></span>
+            <span class="val" style="font-size:13px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.team}</span>
+          </div>`).join('')}
+      `).join('')}
+    </div>`;
+}
+
 function tabOverview() {
   const {managers,totalGames,avgScore,seasons,allMatchups,champRosters,highGame,closestGame,blowout,seasonSummaries,lastSeason} = dashData;
   const topChamp = [...managers].sort((a,b)=>b.championships-a.championships)[0];
@@ -1591,6 +1721,8 @@ function tabOverview() {
         <div class="metric-sub">${topStreak?.name||'—'} all-time</div>
       </div>
     </div>
+
+    ${renderDraftRecap()}
 
     <!-- ── REIGNING CHAMP BANNER ── -->
     ${reigningChamp ? `
