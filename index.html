@@ -2999,25 +2999,47 @@ function renderMoneyTeams(salData, scoringMap, season) {
   if (!el) return;
   const seasonLabel = season || 'Last Season';
 
-  // Enrich matched contracts with scoring data
-  // Only include players with meaningful scoring history (5+ weeks)
-  // A full regular season is ~14 weeks. Use that as the baseline.
+  // Season length so far (works mid-season): most games any contracted player has logged, capped at 14
   const FULL_SEASON = 14;
-  const MIN_WEEKS = 6; // must have played at least 6 games to qualify
+  const seasonWeeks = Math.min(FULL_SEASON, Math.max(1, ...salData.matched.map(c => (c.pid && scoringMap[c.pid]?.weeks) || 0)));
+  const MIN_WEEKS = Math.max(2, Math.min(6, Math.ceil(seasonWeeks * 0.5))); // must have played ~half the games so far
 
-  const valued = salData.matched
+  const base = salData.matched
     .map(c => {
+      if (c.owner === 'Free Agent' || c.owner === 'Unknown') return null;
+      if (!['QB','RB','WR','TE'].includes(c.pos)) return null;
       const score = c.pid ? scoringMap[c.pid] : null;
       if (!score || score.weeks < MIN_WEEKS) return null;
       const ppw = score.avgPts;
-      const availability = Math.min(score.weeks / FULL_SEASON, 1); // 0-1, 1 = played full season
-      // Value = PPW per dollar, penalized by availability
-      // A player who played 6/14 weeks gets a 43% availability penalty
-      const ppd = (ppw * availability) / c.s;
-      const totalPts = score.totalPts;
-      return {...c, ppw, ppd, availability, totalPts, weeks: score.weeks};
+      const availability = Math.min(score.weeks / seasonWeeks, 1);
+      const eff = ppw * availability; // production, discounted for missed games
+      return {...c, ppw, eff, availability, totalPts: score.totalPts, weeks: score.weeks};
     })
     .filter(Boolean);
+
+  // VALUE = production vs. what that salary SHOULD buy at the position.
+  // Within each position, the Nth-highest paid player is expected to be the Nth-best producer.
+  // surplus = actual production − production expected at that pay rank.
+  // A $33 RB who's an RB1 is "fair", not a rip-off; a $33 RB producing like an RB25 is.
+  const valued = [];
+  for (const pos of ['QB','RB','WR','TE']) {
+    const group = base.filter(p => p.pos === pos);
+    if (!group.length) continue;
+    const prodSorted = group.map(p => p.eff).sort((a,b) => b - a);
+    const bySal = [...group].sort((a,b) => b.s - a.s);
+    let i = 0;
+    while (i < bySal.length) {
+      let j = i;
+      while (j + 1 < bySal.length && bySal[j+1].s === bySal[i].s) j++;
+      const slice = prodSorted.slice(i, j + 1); // salary ties share the average expectation
+      const expected = slice.reduce((s,x)=>s+x,0) / slice.length;
+      for (let k = i; k <= j; k++) {
+        const p = bySal[k];
+        valued.push({...p, expected, surplus: p.eff - expected, salRank: i + 1, prodRank: prodSorted.indexOf(p.eff) + 1, posCount: group.length});
+      }
+      i = j + 1;
+    }
+  }
 
   // Sort by value for each team — pick best starters lineup
   // Positions to fill: QB, RB, RB, WR, WR, WR, TE, FLEX(RB/WR/TE)
@@ -3049,12 +3071,12 @@ function renderMoneyTeams(salData, scoringMap, season) {
     return roster;
   }
 
-  // All-Bargain: highest PPD
-  const byBargain = [...valued].sort((a,b) => b.ppd - a.ppd);
+  // All-Bargain: biggest production surplus over pay rank
+  const byBargain = [...valued].sort((a,b) => b.surplus - a.surplus);
   const bargainTeam = buildTeam(byBargain, 'bargain');
 
-  // All-Ripoff: lowest PPD (but only meaningful salary contracts, $3+)
-  const byRipoff = [...valued].filter(c => c.s >= 3).sort((a,b) => a.ppd - b.ppd);
+  // All-Ripoff: biggest shortfall vs pay rank (only meaningful contracts, $3+)
+  const byRipoff = [...valued].filter(c => c.s >= 3 && c.surplus < 0).sort((a,b) => a.surplus - b.surplus);
   const ripoffTeam = buildTeam(byRipoff, 'ripoff');
 
   const SLOT_ORDER = ['QB','RB','WR','TE','FLEX'];
@@ -3083,19 +3105,17 @@ function renderMoneyTeams(salData, scoringMap, season) {
       <div style="padding:0.75rem 1.25rem">
         ${sorted.map((p,i) => {
           const [bg2,fg] = colorFor(p.owner);
-          const valueTxt = p.s === 1
-            ? `$1 steal`
-            : `${p.ppd.toFixed(1)} pts/$`;
+          const valueTxt = `${p.surplus>=0?'+':''}${p.surplus.toFixed(1)} vs pay`;
           return `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border)">
             <span style="font-family:var(--font-mono);font-size:9px;font-weight:600;color:var(--text3);min-width:34px;letter-spacing:0.04em">${p.slot}</span>
             ${posChipS(p.pos)}
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:600;color:var(--text);word-break:break-word">${p.n}</div>
-              <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:1px">${p.owner} · $${p.s} · ${p.y}/${p.t}${p.ro?' RO':''} · <span style="color:${p.weeks>=12?'var(--green-text)':p.weeks>=8?'var(--text3)':'var(--red-text)'}">${p.weeks}gp</span></div>
+              <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:1px">${p.owner} · $${p.s} · ${p.y}/${p.t}${p.ro?' RO':''} · <span style="color:${p.availability>=0.85?'var(--green-text)':p.availability>=0.6?'var(--text3)':'var(--red-text)'}">${p.weeks}gp</span></div>
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-family:var(--font-display);font-size:17px;font-weight:800;color:${accentColor}">${p.ppw.toFixed(1)}</div>
-              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3)">${p.weeks}/${FULL_SEASON} games</div>
+              <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3)">${p.weeks}/${seasonWeeks} gp · ${valueTxt}</div>
             </div>
           </div>`;
         }).join('')}
@@ -3109,7 +3129,7 @@ function renderMoneyTeams(salData, scoringMap, season) {
 
   function valueListRow(p, i, isBargain) {
     const color = isBargain ? 'var(--green-text)' : 'var(--red-text)';
-    const gpColor = p.weeks >= 12 ? 'var(--green-text)' : p.weeks >= 8 ? 'var(--text3)' : 'var(--red-text)';
+    const gpColor = p.availability >= 0.85 ? 'var(--green-text)' : p.availability >= 0.6 ? 'var(--text3)' : 'var(--red-text)';
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
       <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);min-width:20px;text-align:center">${i+1}</span>
       ${posChipS(p.pos)}
@@ -3117,14 +3137,15 @@ function renderMoneyTeams(salData, scoringMap, season) {
       <span style="font-size:11px;color:var(--text3);margin-right:4px">${p.owner}</span>
       <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-right:4px">$${p.s}</span>
       <span style="font-family:var(--font-mono);font-size:10px;color:${gpColor};margin-right:6px">${p.weeks}gp</span>
-      <span style="font-family:var(--font-display);font-size:16px;font-weight:700;color:${color};min-width:52px;text-align:right">${p.ppw.toFixed(1)} PPW</span>
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-right:4px" title="Pay rank vs production rank at position">${p.pos}${p.salRank} pay → ${p.pos}${p.prodRank} prod</span>
+      <span style="font-family:var(--font-display);font-size:16px;font-weight:700;color:${color};min-width:52px;text-align:right">${p.surplus>=0?'+':''}${p.surplus.toFixed(1)}</span>
     </div>`;
   }
 
   el.innerHTML = `
     <div style="text-align:center;padding:1.5rem 0 1.25rem">
       <div style="font-family:var(--font-display);font-size:38px;font-weight:900;font-style:italic;color:var(--gold);text-transform:uppercase;line-height:1">Juice's All Money Teams</div>
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-top:8px">Based on ${seasonLabel} fantasy points per dollar of salary</div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-top:8px">${seasonLabel} production vs. what each salary should buy at that position</div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:2rem">
       ${teamCard(bargainTeam,
@@ -3146,12 +3167,12 @@ function renderMoneyTeams(salData, scoringMap, season) {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
       <div class="card-solo">
         <div style="font-family:var(--font-display);font-size:16px;font-weight:800;text-transform:uppercase;color:var(--green-text);letter-spacing:0.04em;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">💰 Biggest bargains</div>
-        <p class="note">${seasonLabel} · ranked by fantasy points per dollar</p>
+        <p class="note">${seasonLabel} · most PPW above their pay rank</p>
         ${topBargains.map((p,i)=>valueListRow(p,i,true)).join('')}
       </div>
       <div class="card-solo">
         <div style="font-family:var(--font-display);font-size:16px;font-weight:800;text-transform:uppercase;color:var(--red-text);letter-spacing:0.04em;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">🔥 Biggest rip-offs</div>
-        <p class="note">${seasonLabel} · min $3 salary · worst points-per-dollar</p>
+        <p class="note">${seasonLabel} · min $3 salary · most PPW below their pay rank</p>
         ${topRipoffs.map((p,i)=>valueListRow(p,i,false)).join('')}
       </div>
     </div>`;
