@@ -1477,7 +1477,7 @@ const tabCache = {};
 function renderTab(force = false) {
   const el = document.getElementById('tab-content');
   if (!el) return;
-  if (!force && tabCache[currentTab]) {
+  if (!force && currentTab !== 'salaries' && tabCache[currentTab]) {
     el.innerHTML = tabCache[currentTab];
     return;
   }
@@ -1498,136 +1498,6 @@ function lbCard(title, arr, valFn, subFn) {
       <div><div class="val">${valFn(m)}</div><div class="val-sub">${subFn(m)}</div></div>
     </div>`).join('')}
   </div>`;
-}
-
-// ── 2026 ROOKIE DRAFT RECAP ──────────────────────────────────────────────
-// Pulled from the Sleeper API (league 1313934632156147712, draft
-// 1313934632160329728) — 3 rounds, 12 teams, completed Aug 16, 2026.
-const DRAFT_RECAP = {
-  season: "2026",
-  label: "Rookie Draft",
-  dateStr: "Aug 16, 2026",
-  rounds: 3,
-  teams: 12,
-  totalPicks: 36,
-  zeroPickTeams: ["Little Buff Boys", "Ky-Win Williams"],
-  picks: [
-    {no:1,round:1,team:"Weed Warriors",player:"Jeremiyah Love",pos:"RB",nfl:"ARI"},
-    {no:2,round:1,team:"Let's Go, Bradley!!!!",player:"Carnell Tate",pos:"WR",nfl:"TEN"},
-    {no:3,round:1,team:"Let's Go, Bradley!!!!",player:"Jordyn Tyson",pos:"WR",nfl:"NO"},
-    {no:4,round:1,team:"Fuck Tim Couch",player:"Makai Lemon",pos:"WR",nfl:"PHI"},
-    {no:5,round:1,team:"YeYe",player:"Jadarian Price",pos:"RB",nfl:"SEA"},
-    {no:6,round:1,team:"Weed Warriors",player:"Fernando Mendoza",pos:"QB",nfl:"LV"},
-    {no:7,round:1,team:"Fuck Tim Couch",player:"Kenyon Sadiq",pos:"TE",nfl:"NYJ"},
-    {no:8,round:1,team:"Let's Go, Bradley!!!!",player:"KC Concepcion",pos:"WR",nfl:"CLE"},
-    {no:9,round:1,team:"JBOYCOTT89",player:"Jonah Coleman",pos:"RB",nfl:"DEN"},
-    {no:10,round:1,team:"Weed Warriors",player:"De'Zhaun Stribling",pos:"WR",nfl:"SF"},
-    {no:11,round:1,team:"Fuck Tim Couch",player:"Denzel Boston",pos:"WR",nfl:"CLE"},
-    {no:12,round:1,team:"YeYe",player:"Omar Cooper",pos:"WR",nfl:"NYJ"},
-    {no:13,round:2,team:"YeYe",player:"Ja'Kobi Lane",pos:"WR",nfl:"BAL"},
-    {no:14,round:2,team:"I dream of pis'real",player:"Eli Stowers",pos:"TE",nfl:"PHI"},
-    {no:15,round:2,team:"John passingoutski?!?!?!?!",player:"Elijah Sarratt",pos:"WR",nfl:"BAL"},
-    {no:16,round:2,team:"Mahome Bois",player:"Emmett Johnson",pos:"RB",nfl:"KC"},
-    {no:17,round:2,team:"TMcLeod19",player:"Ty Simpson",pos:"QB",nfl:"LAR"},
-    {no:18,round:2,team:"John passingoutski?!?!?!?!",player:"Kaytron Allen",pos:"RB",nfl:"WAS"},
-    {no:19,round:2,team:"I dream of pis'real",player:"Antonio Williams",pos:"WR",nfl:"WAS"},
-    {no:20,round:2,team:"FannINTIFADA!",player:"Germie Bernard",pos:"WR",nfl:"PIT"},
-    {no:21,round:2,team:"JBOYCOTT89",player:"Chris Bell",pos:"WR",nfl:"MIA"},
-    {no:22,round:2,team:"Let's Go, Bradley!!!!",player:"Max Klare",pos:"TE",nfl:"LAR"},
-    {no:23,round:2,team:"John passingoutski?!?!?!?!",player:"Skyler Bell",pos:"WR",nfl:"BUF"},
-    {no:24,round:2,team:"JBOYCOTT89",player:"Mike Washington",pos:"RB",nfl:"LV"},
-    {no:25,round:3,team:"John passingoutski?!?!?!?!",player:"Malachi Fields",pos:"WR",nfl:"NYG"},
-    {no:26,round:3,team:"Let's Go, Bradley!!!!",player:"Eli Raridon",pos:"TE",nfl:"NE"},
-    {no:27,round:3,team:"Mahome Bois",player:"Adam Randall",pos:"RB",nfl:"BAL"},
-    {no:28,round:3,team:"FannINTIFADA!",player:"Zachariah Branch",pos:"WR",nfl:"ATL"},
-    {no:29,round:3,team:"YeYe",player:"Caleb Douglas",pos:"WR",nfl:"MIA"},
-    {no:30,round:3,team:"FannINTIFADA!",player:"Oscar Delp",pos:"TE",nfl:"NO"},
-    {no:31,round:3,team:"Weed Warriors",player:"Ted Hurst",pos:"WR",nfl:"TB"},
-    {no:32,round:3,team:"Weed Warriors",player:"Carson Beck",pos:"QB",nfl:"ARI"},
-    {no:33,round:3,team:"I dream of pis'real",player:"Chris Brazzell",pos:"WR",nfl:"CAR"},
-    {no:34,round:3,team:"YeYe",player:"Cyrus Allen",pos:"WR",nfl:"KC"},
-    {no:35,round:3,team:"FannINTIFADA!",player:"J'Mari Taylor",pos:"RB",nfl:"JAX"},
-    {no:36,round:3,team:"YeYe",player:"Kaelon Black",pos:"RB",nfl:"SF"},
-  ]
-};
-
-function renderDraftRecap() {
-  const d = DRAFT_RECAP;
-  const byTeam = {};
-  d.picks.forEach(p => {
-    byTeam[p.team] = byTeam[p.team] || {team:p.team, count:0, firsts:0};
-    byTeam[p.team].count++;
-    if (p.round === 1) byTeam[p.team].firsts++;
-  });
-  const teamList = Object.values(byTeam).sort((a,b)=>b.count-a.count);
-  const mostPicks = teamList[0];
-  const tripleFirsts = teamList.filter(t=>t.firsts>=3);
-  const posCounts = {};
-  d.picks.forEach(p => { posCounts[p.pos] = (posCounts[p.pos]||0)+1; });
-  const wrPct = Math.round((posCounts.WR||0)/d.totalPicks*100);
-  const lastQB = [...d.picks].reverse().find(p=>p.pos==='QB');
-  const otherStackers = tripleFirsts.filter(t=>t.team!==mostPicks.team).map(t=>t.team);
-  function joinList(arr) {
-    if (arr.length <= 1) return arr.join('');
-    if (arr.length === 2) return `${arr[0]} and ${arr[1]}`;
-    return `${arr.slice(0,-1).join(', ')}, and ${arr[arr.length-1]}`;
-  }
-  const roundsGrouped = [1,2,3].map(r => ({round:r, picks: d.picks.filter(p=>p.round===r)}));
-
-  return `
-    <div class="section-label">${d.season} ${d.label} recap</div>
-    <div class="card-solo" style="padding:1.25rem 1.5rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase">${d.dateStr} · ${d.rounds} rounds · ${d.teams} teams · ${d.totalPicks} picks</div>
-        <span class="badge">Fresh off the board</span>
-      </div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:18px">
-        The ${d.season} rookie class is officially in the building, and draft capital landed wildly unevenly.
-        <strong style="color:var(--text)">${mostPicks.team}</strong> walked away with the deepest class of anyone,
-        cashing in ${mostPicks.count} total selections across all three rounds${otherStackers.length ? `, while ${joinList(otherStackers.map(t=>`<strong style="color:var(--text)">${t}</strong>`))} each stacked three first-rounders of their own` : ''}.
-        On the other end, ${joinList(d.zeroPickTeams.map(t=>`<strong style="color:var(--text)">${t}</strong>`))} sat the entire draft out —
-        every pick they owned had already been dealt away before Round 1 even started.
-        Wideouts ruled the board: ${posCounts.WR||0} of the ${d.totalPicks} picks (${wrPct}%) were receivers, against just
-        ${posCounts.RB||0} running backs, ${posCounts.TE||0} tight ends, and ${posCounts.QB||0} quarterbacks — the last QB off the board,
-        ${lastQB ? lastQB.player : '—'}, didn't come off the board until pick ${lastQB ? lastQB.no : '—'}.
-      </p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
-        <div class="metric" style="padding:14px 16px">
-          <div class="metric-label">Deepest class</div>
-          <div class="metric-value" style="font-size:22px">${mostPicks.count} picks</div>
-          <div class="metric-sub">${mostPicks.team}</div>
-        </div>
-        <div class="metric" style="padding:14px 16px">
-          <div class="metric-label">Position of choice</div>
-          <div class="metric-value" style="font-size:22px">${posCounts.WR||0} WR</div>
-          <div class="metric-sub">${wrPct}% of all picks</div>
-        </div>
-        <div class="metric" style="padding:14px 16px">
-          <div class="metric-label">Sat it out</div>
-          <div class="metric-value" style="font-size:22px">0 picks</div>
-          <div class="metric-sub">${d.zeroPickTeams.join(' · ')}</div>
-        </div>
-        <div class="metric" style="padding:14px 16px">
-          <div class="metric-label">First off the board</div>
-          <div class="metric-value" style="font-size:22px">${d.picks[0].player}</div>
-          <div class="metric-sub">${d.picks[0].pos} · ${d.picks[0].team}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card-solo" style="margin-top:1px">
-      <h3>Full draft board</h3>
-      ${roundsGrouped.map(rg => `
-        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.14em;color:var(--gold);text-transform:uppercase;margin:${rg.round===1?'0':'14px'} 0 4px">Round ${rg.round}</div>
-        ${rg.picks.map(p => `
-          <div class="lb-row">
-            <span class="rank">${p.no}</span>
-            ${posChipS(p.pos)}
-            <span class="lname">${p.player} <span style="color:var(--text3);font-weight:400">· ${p.nfl}</span></span>
-            <span class="val" style="font-size:13px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.team}</span>
-          </div>`).join('')}
-      `).join('')}
-    </div>`;
 }
 
 function tabOverview() {
@@ -1721,8 +1591,6 @@ function tabOverview() {
         <div class="metric-sub">${topStreak?.name||'—'} all-time</div>
       </div>
     </div>
-
-    ${renderDraftRecap()}
 
     <!-- ── REIGNING CHAMP BANNER ── -->
     ${reigningChamp ? `
@@ -2309,78 +2177,110 @@ function tabChampions() {
 
 // ── CONTRACT DATA ──
 const CONTRACT_LIST = [
-  {s:12,n:'Patrick Mahomes',y:2,t:3,ro:false},{s:9,n:'Lamar Jackson',y:2,t:3,ro:false},{s:1,n:'Michael Penix Jr.',y:2,t:3,ro:true},{s:6,n:'Justin Herbert',y:3,t:3,ro:false},{s:3,n:'Jayden Daniels',y:2,t:3,ro:true},{s:4,n:'Brock Purdy',y:3,t:3,ro:false},{s:1,n:'Baker Mayfield',y:2,t:3,ro:false},{s:12,n:'Jalen Hurts',y:3,t:3,ro:false},{s:8,n:'Joe Burrow',y:3,t:3,ro:false},{s:1,n:'CJ Stroud',y:3,t:3,ro:true},{s:13,n:'Josh Allen',y:3,t:3,ro:false,hint:'QB'},{s:1,n:'Bo Nix',y:2,t:3,ro:true},
-  {s:21,n:'Davante Adams',y:2,t:3,ro:false},{s:6,n:'Kyler Murray',y:1,t:1,ro:false},{s:2,n:'Devon Achane',y:3,t:3,ro:true},{s:6,n:'Malik Nabers',y:2,t:3,ro:true},{s:1,n:'Drake Maye',y:2,t:3,ro:true,hint:'QB'},{s:2,n:'Tua Tagovailoa',y:2,t:3,ro:false},{s:5,n:'Jordan Love',y:2,t:3,ro:false},{s:6,n:'Dak Prescott',y:3,t:3,ro:false},{s:2,n:'Trevor Lawrence',y:2,t:3,ro:false},{s:3,n:'Justin Fields',y:1,t:3,ro:false},{s:15,n:'Josh Jacobs',y:2,t:3,ro:false},{s:3,n:'Jared Goff',y:2,t:3,ro:false},
-  {s:5,n:'Brian Robinson',y:1,t:3,ro:false},{s:7,n:'Javonte Williams',y:2,t:2,ro:false},{s:1,n:'Jaylen Wright',y:2,t:3,ro:true},{s:30,n:'Jamarr Chase',y:1,t:3,ro:false},{s:1,n:'JJ McCarthy',y:2,t:3,ro:true},{s:30,n:'Christian McCaffrey',y:2,t:3,ro:false},{s:4,n:'TJ Hockenson',y:1,t:3,ro:false},{s:9,n:'Devonta Smith',y:2,t:3,ro:false},{s:2,n:'Caleb Williams',y:2,t:3,ro:true},{s:1,n:'Darnell Washington',y:3,t:3,ro:true},{s:9,n:'Mike Evans',y:3,t:3,ro:false},{s:1,n:'Adonai Mitchell',y:2,t:3,ro:true},
-  {s:4,n:'Matt Stafford',y:3,t:3,ro:false,hint:'QB'},{s:1,n:'Tyrone Tracy',y:2,t:3,ro:true},{s:1,n:'Jacob Cowing',y:2,t:3,ro:false},{s:1,n:'Josh Downs',y:3,t:3,ro:true},{s:10,n:'Omarion Hampton',y:1,t:3,ro:true},{s:1,n:'Bucky Irving',y:2,t:3,ro:true},{s:3,n:'Ladd McConkey',y:2,t:3,ro:true},{s:2,n:'Khalil Shakir',y:1,t:3,ro:false},{s:1,n:'Marshawn Lloyd',y:2,t:3,ro:true},{s:10,n:'Cooper Kupp',y:2,t:3,ro:false},{s:1,n:'Sam LaPorta',y:3,t:3,ro:true},{s:15,n:'Kyren Williams',y:1,t:1,ro:false},
-  {s:1,n:'Puka Nacua',y:3,t:3,ro:true},{s:33,n:'Saquon Barkley',y:2,t:2,ro:false},{s:1,n:'Spencer Rattler',y:2,t:3,ro:false},{s:2,n:'Dalton Kincaid',y:3,t:3,ro:true},{s:2,n:'Jameson Williams',y:2,t:3,ro:false},{s:7,n:'Treveyon Henderson',y:1,t:3,ro:true},{s:2,n:'Brian Thomas',y:2,t:3,ro:true},{s:3,n:'Brock Bowers',y:2,t:3,ro:true},{s:10,n:'Jahmyr Gibbs',y:3,t:3,ro:true},{s:1,n:'Jalynn Polk',y:2,t:3,ro:true},{s:1,n:'Josh Palmer',y:2,t:3,ro:false,hint:'WR'},{s:2,n:'Blake Corum',y:2,t:3,ro:true},
-  {s:1,n:'Michael Wilson',y:3,t:3,ro:false},{s:9,n:'JK Dobbins',y:3,t:3,ro:false},{s:4,n:'David Njoku',y:1,t:3,ro:false},{s:1,n:'Hunter Henry',y:2,t:3,ro:false},{s:2,n:'Jake Ferguson',y:3,t:3,ro:false},{s:5,n:'Rhamondre Stevenson',y:2,t:3,ro:false},{s:1,n:'Harold Fannin',y:1,t:3,ro:true},{s:1,n:'Tyjae Spears',y:3,t:3,ro:true},{s:15,n:'Drake London',y:1,t:3,ro:false},{s:1,n:'Tank Dell',y:3,t:3,ro:true},{s:12,n:'Tee Higgins',y:3,t:3,ro:false},{s:2,n:'Demario Douglas',y:1,t:3,ro:false,hint:'WR'},
-  {s:1,n:'Rashod Bateman',y:3,t:3,ro:false},{s:28,n:'CeeDee Lamb',y:2,t:3,ro:false},{s:5,n:'Brandon Aiyuk',y:3,t:3,ro:false},{s:13,n:'David Montgomery',y:1,t:2,ro:false},{s:5,n:'Tetairoa McMillan',y:1,t:3,ro:true},{s:4,n:'Evan Engram',y:3,t:3,ro:false},{s:1,n:'Braelon Allen',y:2,t:3,ro:true},{s:1,n:'Jerome Ford',y:3,t:3,ro:false},{s:8,n:'Garrett Wilson',y:1,t:3,ro:false},{s:2,n:'Allen Lazard',y:2,t:3,ro:false},{s:2,n:'Jakobi Meyers',y:3,t:3,ro:false},{s:21,n:"Amon-Ra St. Brown",y:1,t:3,ro:false},
-  {s:2,n:'Rachaad White',y:1,t:3,ro:false},{s:1,n:'Chase Brown',y:3,t:3,ro:true},{s:12,n:'Deebo Samuel',y:3,t:3,ro:false},{s:1,n:'Isiah Pacheco',y:1,t:1,ro:false},{s:5,n:'Travis Hunter',y:1,t:3,ro:true},{s:11,n:'Nico Collins',y:2,t:3,ro:false},{s:1,n:'Jalen McMillan',y:2,t:3,ro:true},{s:4,n:'Stefon Diggs',y:1,t:3,ro:false},{s:16,n:'Jonathan Taylor',y:3,t:3,ro:false},{s:8,n:'Chris Godwin',y:2,t:3,ro:false},{s:1,n:'Jayden Reed',y:3,t:3,ro:true},{s:3,n:'Jaxon Smith-Njigba',y:3,t:3,ro:true},
-  {s:22,n:'AJ Brown',y:2,t:3,ro:false},{s:12,n:'Alvin Kamara',y:3,t:3,ro:false},{s:4,n:'Darnell Mooney',y:1,t:2,ro:false},{s:25,n:'Justin Jefferson',y:2,t:3,ro:false},{s:1,n:'Donte Thornton',y:1,t:3,ro:true},{s:10,n:'DK Metcalf',y:1,t:3,ro:false},{s:1,n:'Isaac Teslaa',y:1,t:3,ro:true},{s:4,n:'Jordan Addison',y:3,t:3,ro:true},{s:12,n:'James Cook',y:1,t:3,ro:false},{s:1,n:'Damien Martinez',y:1,t:3,ro:true},{s:9,n:'Jaylen Waddle',y:2,t:3,ro:false},{s:3,n:'Tyler Warren',y:1,t:3,ro:true},
-  {s:7,n:'Jerry Jeudy',y:3,t:3,ro:false},{s:2,n:'Pat Freiermuth',y:2,t:3,ro:false},{s:1,n:'Sam Darnold',y:1,t:2,ro:false},{s:4,n:'Jacory Croskey-Merritt',y:1,t:2,ro:false},{s:1,n:'Jayden Higgins',y:1,t:3,ro:true},{s:10,n:'Calvin Ridley',y:1,t:2,ro:false},{s:1,n:'Tory Horton',y:1,t:3,ro:true},{s:5,n:'Quinshon Judkins',y:1,t:3,ro:true},{s:13,n:'Trey McBride',y:1,t:3,ro:false},{s:2,n:'Dylan Sampson',y:1,t:3,ro:true},{s:4,n:'Courtland Sutton',y:2,t:2,ro:false},{s:4,n:'Chris Olave',y:1,t:3,ro:false},
-  {s:14,n:'George Kittle',y:3,t:3,ro:false},{s:3,n:'Dallas Goedert',y:2,t:3,ro:false},{s:3,n:'Chig Okonkwo',y:3,t:3,ro:false},{s:4,n:'Travis Etienne',y:1,t:2,ro:false},{s:15,n:'Bijan Robinson',y:3,t:3,ro:true},{s:1,n:'Jaxson Dart',y:1,t:3,ro:true},{s:1,n:'Jack Bech',y:1,t:3,ro:true},{s:5,n:'Kyle Pitts',y:1,t:3,ro:false},{s:1,n:'Isaiah Likely',y:1,t:3,ro:false},{s:1,n:'Ray Davis',y:2,t:3,ro:true},{s:1,n:'Bryce Young',y:3,t:3,ro:true},{s:1,n:'Isaiah Bond',y:1,t:3,ro:false},
-  {s:2,n:'Cole Kmet',y:2,t:3,ro:false},{s:7,n:'Terry McLaurin',y:2,t:3,ro:false},{s:1,n:'Jordan Whittington',y:2,t:3,ro:false},{s:4,n:'Jauan Jennings',y:1,t:2,ro:false},{s:11,n:'Breece Hall',y:1,t:3,ro:false},{s:1,n:'Jalen Royals',y:1,t:3,ro:true},{s:4,n:'Matthew Golden',y:1,t:3,ro:true},{s:2,n:'Geno Smith',y:1,t:2,ro:false},{s:1,n:'Quintez Cephus',y:3,t:3,ro:true},{s:1,n:'Tyler Conklin',y:2,t:3,ro:false},{s:1,n:'Bhayshul Tuten',y:1,t:3,ro:true},{s:1,n:'Darren Waller',y:1,t:2,ro:false},
-  {s:2,n:'Michael Pittman',y:3,t:3,ro:false},{s:1,n:'Jermaine Burton',y:2,t:3,ro:true},{s:1,n:'Ricky Pearsall',y:2,t:3,ro:true},{s:3,n:'Tucker Kraft',y:1,t:2,ro:false},{s:2,n:'Cade Otton',y:1,t:1,ro:false},{s:1,n:'Trevor Etienne',y:1,t:3,ro:true},{s:1,n:'Will Shipley',y:2,t:3,ro:true},{s:4,n:'Ollie Gordon',y:1,t:3,ro:false},{s:1,n:'Brashard Smith',y:1,t:3,ro:false},{s:6,n:'Jonathan Brooks',y:2,t:3,ro:true,hint:'RB'},{s:2,n:'Keon Coleman',y:2,t:3,ro:true},{s:13,n:'Marvin Harrison',y:2,t:3,ro:true},
-  {s:1,n:'Ben Sinnott',y:2,t:3,ro:true},{s:5,n:'RJ Harvey',y:1,t:3,ro:true},{s:1,n:'Pat Bryant',y:1,t:3,ro:true},{s:1,n:'Mike Gesicki',y:1,t:2,ro:false},{s:1,n:'Colby Parkinson',y:2,t:3,ro:false},{s:1,n:'Audric Estime',y:2,t:3,ro:true},{s:3,n:'Trey Benson',y:2,t:3,ro:true},{s:2,n:'Tahj Brooks',y:1,t:3,ro:false},{s:1,n:'Roman Wilson',y:2,t:3,ro:true},{s:5,n:'Keaton Mitchell',y:2,t:3,ro:false},{s:1,n:'Jalen Milroe',y:1,t:3,ro:true},{s:1,n:'Chuba Hubbard',y:2,t:3,ro:false},
-  {s:1,n:'Luke McCaffrey',y:2,t:3,ro:true},{s:1,n:'Tre Harris',y:1,t:3,ro:true},{s:24,n:'Tyreek Hill',y:2,t:2,ro:false},{s:1,n:'Kayshon Boutte',y:1,t:2,ro:false},{s:1,n:'Emeka Egbuka',y:1,t:3,ro:true},{s:1,n:'Christian Watson',y:1,t:2,ro:false},{s:1,n:'Tank Bigsby',y:3,t:3,ro:true},{s:2,n:'Rashid Shaheed',y:2,t:3,ro:false},{s:2,n:'Rome Odunze',y:2,t:3,ro:true},{s:1,n:'Colston Loveland',y:1,t:3,ro:true},{s:3,n:'Tyler Allgeier',y:2,t:3,ro:false},{s:1,n:'Mason Taylor',y:1,t:3,ro:true},
-  {s:3,n:'Zach Charbonnet',y:3,t:3,ro:true},{s:3,n:'Cam Skattebo',y:1,t:3,ro:true},{s:15,n:'Ashton Jeanty',y:1,t:3,ro:true},{s:1,n:'Aaron Rodgers',y:1,t:2,ro:false},{s:1,n:'Jonnu Smith',y:2,t:3,ro:false},{s:1,n:'Woody Marks',y:1,t:3,ro:true},{s:2,n:'Christian Kirk',y:1,t:2,ro:false},{s:1,n:'Roschon Johnson',y:3,t:3,ro:true},{s:1,n:'Cam Ward',y:1,t:3,ro:true},{s:3,n:'Juwan Johnson',y:3,t:3,ro:false},{s:1,n:'Troy Franklin',y:2,t:3,ro:true},
-  {s:1,n:'Michael Mayer',y:3,t:3,ro:true},{s:7,n:'George Pickens',y:1,t:3,ro:false},{s:4,n:'Elijah Arroyo',y:1,t:2,ro:false},{s:43,n:'Derrick Henry',y:1,t:1,ro:false},{s:4,n:'Austin Ekeler',y:1,t:1,ro:false},{s:2,n:'Zay Flowers',y:3,t:3,ro:true},{s:1,n:'Dyami Brown',y:1,t:2,ro:false},{s:1,n:'Shedeur Sanders',y:1,t:2,ro:false},{s:1,n:'Luther Burden',y:1,t:3,ro:true},{s:1,n:'Romeo Doubs',y:2,t:3,ro:false},{s:1,n:'Daniel Jones',y:1,t:2,ro:false},
-  {s:4,n:'Kenneth Walker',y:1,t:1,ro:false},{s:3,n:'Brenton Strange',y:1,t:2,ro:false},{s:1,n:'Alec Pierce',y:1,t:3,ro:false},{s:1,n:'Kareem Hunt',y:1,t:1,ro:false},{s:2,n:'Andre Iosivas',y:1,t:2,ro:false,hint:'WR'},{s:1,n:'Devin Neal',y:1,t:3,ro:true},{s:1,n:'Noah Gray',y:1,t:2,ro:false},{s:1,n:'Jaylin Noel',y:1,t:3,ro:true},{s:1,n:'Jordan Mason',y:2,t:3,ro:false},{s:1,n:'Theo Johnson',y:2,t:3,ro:false},
-  {s:1,n:'Rashee Rice',y:3,t:3,ro:true},{s:1,n:'Gunnar Helm',y:1,t:2,ro:false},{s:2,n:'Zach Ertz',y:1,t:1,ro:false},{s:1,n:'Chris Rodriguez',y:1,t:2,ro:false},{s:1,n:'Terrance Ferguson',y:1,t:3,ro:true},{s:1,n:'Jalen Coker',y:1,t:2,ro:false},{s:1,n:'Kyle Williams',y:1,t:3,ro:true},{s:1,n:'Kyle Monangai',y:1,t:3,ro:true},{s:1,n:'WanDale Robinson',y:1,t:3,ro:false},
-  {s:6,n:'Tony Pollard',y:1,t:3,ro:false},{s:6,n:'Kaleb Johnson',y:1,t:3,ro:true,hint:'RB'},{s:1,n:'Cedric Tillman',y:1,t:2,ro:false},{s:7,n:"D'Andre Swift",y:3,t:3,ro:false,hint:'RB'},{s:6,n:'Jaylen Warren',y:2,t:3,ro:false},
-  {s:1,n:'Jordan James',y:1,t:3,ro:true},{s:14,n:'James Conner',y:1,t:1,ro:false},{s:1,n:'Jaydon Blue',y:1,t:3,ro:true},{s:1,n:'Tyler Shough',y:1,t:3,ro:false},
-  {s:1,n:'DJ Giddens',y:1,t:3,ro:true,hint:'RB'},{s:4,n:'Najee Harris',y:1,t:3,ro:false},{s:1,n:"Ke'Andrae Lambert-Smith",y:1,t:2,ro:false},{s:3,n:'Xavier Worthy',y:2,t:3,ro:true},
-  {s:4,n:'Travis Kelce',y:1,t:3,ro:false},{s:3,n:'Rico Dowdle',y:1,t:1,ro:false},
-  {s:3,n:'Elic Ayomanor',y:1,t:3,ro:false},
-  {s:1,n:'Jarquez Hunter',y:1,t:3,ro:false},
+  {s:14,n:"Josh Allen",y:1,t:3,ro:false,id:'4984'},{s:9,n:"Lamar Jackson",y:3,t:3,ro:false,id:'4881'},{s:12,n:"Jalen Hurts",y:1,t:3,ro:false,id:'6904'},{s:2,n:"Caleb Williams",y:3,t:3,ro:true,id:'11560'},
+  {s:8,n:"Joe Burrow",y:1,t:3,ro:false,id:'6770'},{s:3,n:"Jayden Daniels",y:3,t:3,ro:true,id:'11566'},{s:1,n:"Drake Maye",y:3,t:3,ro:true,id:'11564'},{s:4,n:"Brock Purdy",y:1,t:3,ro:false,id:'8183'},
+  {s:3,n:"Jared Goff",y:3,t:3,ro:false,id:'3163'},{s:12,n:"Patrick Mahomes",y:3,t:3,ro:false,id:'4046'},{s:1,n:"C.J. Stroud",y:1,t:3,ro:false,id:'9758'},{s:6,n:"Justin Herbert",y:1,t:2,ro:false,id:'6797'},
+  {s:2,n:"Trevor Lawrence",y:3,t:3,ro:false,id:'7523'},{s:6,n:"Dak Prescott",y:1,t:3,ro:false,id:'3294'},{s:3,n:"Cam Skattebo",y:2,t:3,ro:true,id:'12481'},{s:5,n:"Jordan Love",y:3,t:3,ro:false,id:'6804'},
+  {s:2,n:"Geno Smith",y:1,t:2,ro:false,id:'1373'},{s:1,n:"Sam Darnold",y:1,t:3,ro:false,id:'4943'},{s:1,n:"Fernando Mendoza",y:1,t:3,ro:true,id:'13269'},{s:1,n:"Jaxson Dart",y:2,t:3,ro:true,id:'12508'},
+  {s:1,n:"Daniel Jones",y:1,t:2,ro:false,id:'5870'},{s:21,n:"Davante Adams",y:3,t:3,ro:false,id:'2133'},{s:1,n:"Cam Ward",y:2,t:3,ro:true,id:'12522'},{s:6,n:"Malik Nabers",y:3,t:3,ro:true,id:'11632'},
+  {s:12,n:"James Cook",y:2,t:3,ro:false,id:'8138'},{s:1,n:"Adonai Mitchell",y:3,t:3,ro:true,id:'11625'},{s:1,n:"Malik Washington",y:1,t:3,ro:false,id:'11610'},{s:31,n:"Jonathan Taylor",y:1,t:2,ro:false,id:'6813'},
+  {s:9,n:"Jaylen Waddle",y:3,t:3,ro:false,id:'7526'},{s:23,n:"De'Von Achane",y:1,t:3,ro:false,id:'9226'},{s:1,n:"Bo Nix",y:3,t:3,ro:true,id:'11563'},{s:30,n:"Christian McCaffrey",y:3,t:3,ro:false,id:'4034'},
+  {s:13,n:"Javonte Williams",y:1,t:2,ro:false,id:'7588'},{s:5,n:"Brian Robinson",y:2,t:3,ro:false,id:'8154'},{s:1,n:"Darnell Washington",y:1,t:3,ro:false,id:'9479'},{s:30,n:"Ja'Marr Chase",y:2,t:3,ro:false,id:'7564'},
+  {s:1,n:"Ray Davis",y:3,t:3,ro:true,id:'11575'},{s:19,n:"Kyren Williams",y:1,t:3,ro:false,id:'8150'},{s:1,n:"Sam LaPorta",y:1,t:1,ro:false,id:'10859'},{s:3,n:"Ladd McConkey",y:3,t:3,ro:true,id:'11635'},
+  {s:2,n:"Khalil Shakir",y:2,t:3,ro:false,id:'8134'},{s:1,n:"Jaylen Wright",y:3,t:3,ro:true,id:'11643'},{s:1,n:"Emeka Egbuka",y:2,t:3,ro:true,id:'12514'},{s:1,n:"Bucky Irving",y:3,t:3,ro:true,id:'11584'},
+  {s:1,n:"Tyrone Tracy",y:3,t:3,ro:true,id:'11655'},{s:4,n:"Matthew Stafford",y:1,t:2,ro:false,id:'421'},{s:1,n:"Luther Burden",y:2,t:3,ro:true,id:'12519'},{s:1,n:"Josh Downs",y:1,t:1,ro:false,id:'9500'},
+  {s:10,n:"Jahmyr Gibbs",y:1,t:1,ro:false,id:'9221'},{s:2,n:"Blake Corum",y:3,t:3,ro:true,id:'11586'},{s:11,n:"Breece Hall",y:2,t:3,ro:false,id:'8155'},{s:3,n:"Brock Bowers",y:3,t:3,ro:true,id:'11604'},
+  {s:15,n:"Ashton Jeanty",y:2,t:3,ro:true,id:'12527'},{s:2,n:"Jameson Williams",y:3,t:3,ro:false,id:'8148'},{s:7,n:"TreVeyon Henderson",y:2,t:3,ro:true,id:'12529'},{s:29,n:"Saquon Barkley",y:1,t:1,ro:false,id:'4866'},
+  {s:1,n:"Drew Allar",y:1,t:2,ro:false,id:'13289'},{s:1,n:"Puka Nacua",y:1,t:1,ro:false,id:'9493'},{s:3,n:"Elic Ayomanor",y:2,t:3,ro:false,id:'12499'},{s:2,n:"Dalton Kincaid",y:1,t:2,ro:false,id:'10236'},
+  {s:15,n:"Drake London",y:2,t:3,ro:false,id:'8112'},{s:1,n:"Tyler Shough",y:2,t:3,ro:false,id:'12545'},{s:16,n:"Tee Higgins",y:1,t:3,ro:false,id:'6801'},{s:1,n:"Harold Fannin",y:2,t:3,ro:true,id:'12506'},
+  {s:2,n:"Tyjae Spears",y:1,t:3,ro:false,id:'9508'},{s:3,n:"Chig Okonkwo",y:1,t:2,ro:false,id:'8210'},{s:2,n:"Jake Ferguson",y:1,t:3,ro:false,id:'8110'},{s:5,n:"Rhamondre Stevenson",y:3,t:3,ro:false,id:'7611'},
+  {s:7,n:"George Pickens",y:2,t:3,ro:false,id:'8137'},{s:2,n:"Michael Wilson",y:1,t:3,ro:false,id:'10232'},{s:1,n:"Tank Dell",y:1,t:3,ro:false,id:'9502'},{s:1,n:"Hunter Henry",y:3,t:3,ro:false,id:'3214'},
+  {s:8,n:"Garrett Wilson",y:2,t:3,ro:false,id:'8146'},{s:21,n:"Amon-Ra St. Brown",y:2,t:3,ro:false,id:'7547'},{s:6,n:"Rico Dowdle",y:1,t:2,ro:false,id:'7021'},{s:2,n:"Rome Odunze",y:3,t:3,ro:true,id:'11620'},
+  {s:15,n:"Josh Jacobs",y:3,t:3,ro:false,id:'5850'},{s:1,n:"Michael Penix",y:3,t:3,ro:true,id:'11559'},{s:5,n:"Tetairoa McMillan",y:2,t:3,ro:true,id:'12526'},{s:1,n:"Christian Watson",y:2,t:2,ro:false,id:'8167'},
+  {s:28,n:"CeeDee Lamb",y:3,t:3,ro:false,id:'6786'},{s:6,n:"Tony Pollard",y:2,t:3,ro:false,id:'5967'},{s:1,n:"Jarquez Hunter",y:2,t:3,ro:false,id:'11569'},{s:13,n:"David Montgomery",y:2,t:2,ro:false,id:'5892'},
+  {s:27,n:"Derrick Henry",y:1,t:1,ro:false,id:'3198'},{s:3,n:"Jaxon Smith-Njigba",y:1,t:1,ro:false,id:'9488'},{s:3,n:"Jayden Reed",y:1,t:3,ro:false,id:'10222'},{s:1,n:"Jalen McMillan",y:3,t:3,ro:true,id:'11618'},
+  {s:1,n:"Zavion Thomas",y:1,t:3,ro:true,id:'13411'},{s:1,n:"Alec Pierce",y:2,t:3,ro:false,id:'8142'},{s:4,n:"Travis Kelce",y:2,t:3,ro:false,id:'1466'},{s:11,n:"Nico Collins",y:3,t:3,ro:false,id:'7569'},
+  {s:1,n:"Chase Brown",y:1,t:1,ro:false,id:'9224'},{s:2,n:"Rachaad White",y:2,t:3,ro:false,id:'8136'},{s:1,n:"Theo Johnson",y:3,t:3,ro:false,id:'11597'},{s:1,n:"Isiah Pacheco",y:1,t:1,ro:false,id:'8205'},
+  {s:2,n:"Zay Flowers",y:1,t:1,ro:false,id:'9997'},{s:3,n:"Tyler Warren",y:2,t:3,ro:true,id:'12518'},{s:10,n:"D'Andre Swift",y:1,t:3,ro:false,id:'6790'},{s:1,n:"Isaac TeSlaa",y:2,t:3,ro:true,id:'12535'},
+  {s:4,n:"Jordan Addison",y:1,t:3,ro:false,id:'9756'},{s:1,n:"Pat Bryant",y:2,t:3,ro:true,id:'12492'},{s:1,n:"De'Zhaun Stribling",y:1,t:3,ro:true,id:'13417'},{s:10,n:"DK Metcalf",y:2,t:3,ro:false,id:'5846'},
+  {s:3,n:"Brenton Strange",y:2,t:2,ro:false,id:'9480'},{s:22,n:"A.J. Brown",y:3,t:3,ro:false,id:'5859'},{s:1,n:"Damien Martinez",y:2,t:3,ro:true,id:'12462'},{s:25,n:"Justin Jefferson",y:3,t:3,ro:false,id:'6794'},
+  {s:13,n:"Trey McBride",y:2,t:3,ro:false,id:'8130'},{s:4,n:"Chris Olave",y:2,t:3,ro:false,id:'8144'},{s:1,n:"Kyle Monangai",y:2,t:3,ro:true,id:'12534'},{s:1,n:"Tory Horton",y:2,t:3,ro:true,id:'12497'},
+  {s:5,n:"Quinshon Judkins",y:2,t:3,ro:true,id:'12512'},{s:1,n:"Eli Stowers",y:1,t:3,ro:true,id:'13349'},{s:11,n:"Parker Washington",y:1,t:3,ro:false,id:'9487'},{s:2,n:"Pat Freiermuth",y:3,t:3,ro:false,id:'7600'},
+  {s:20,n:"Kenneth Walker",y:1,t:3,ro:false,id:'8151'},{s:2,n:"Dylan Sampson",y:2,t:3,ro:true,id:'12469'},{s:4,n:"Jacory Croskey-Merritt",y:2,t:2,ro:false,id:'12533'},{s:1,n:"Jayden Higgins",y:2,t:3,ro:true,id:'12484'},
+  {s:1,n:"Isaiah Likely",y:2,t:3,ro:false,id:'8131'},{s:3,n:"Michael Pittman",y:1,t:3,ro:false,id:'6819'},{s:1,n:"Bryce Young",y:1,t:2,ro:false,id:'9228'},{s:1,n:"Romeo Doubs",y:3,t:3,ro:false,id:'8121'},
+  {s:5,n:"Kyle Pitts",y:2,t:3,ro:false,id:'7553'},{s:1,n:"Antonio Williams",y:1,t:3,ro:true,id:'13301'},{s:33,n:"Bijan Robinson",y:1,t:3,ro:false,id:'9509'},{s:2,n:"Chris Rodriguez",y:1,t:2,ro:false,id:'10219'},
+  {s:3,n:"Dallas Goedert",y:3,t:3,ro:false,id:'5022'},{s:1,n:"Rashee Rice",y:1,t:1,ro:false,id:'10229'},{s:1,n:"Shedeur Sanders",y:1,t:2,ro:false,id:'12524'},{s:4,n:"Travis Etienne",y:2,t:2,ro:false,id:'7543'},
+  {s:3,n:"Quentin Johnston",y:1,t:3,ro:false,id:'9754'},{s:1,n:"Gunnar Helm",y:1,t:2,ro:false,id:'12502'},{s:1,n:"Bhayshul Tuten",y:2,t:3,ro:true,id:'12490'},{s:4,n:"Matthew Golden",y:2,t:3,ro:true,id:'12501'},
+  {s:2,n:"Rashid Shaheed",y:3,t:3,ro:false,id:'8676'},{s:1,n:"Demond Claiborne",y:1,t:3,ro:true,id:'13347'},{s:1,n:"Dalton Schultz",y:1,t:3,ro:false,id:'5001'},{s:1,n:"Audric Estime",y:3,t:3,ro:true,id:'11579'},
+  {s:7,n:"Terry McLaurin",y:3,t:3,ro:false,id:'5927'},{s:1,n:"Michael Mayer",y:1,t:3,ro:false,id:'9482'},{s:1,n:"Jaylin Noel",y:2,t:3,ro:true,id:'12536'},{s:3,n:"Tucker Kraft",y:2,t:2,ro:false,id:'9484'},
+  {s:2,n:"Jalen Coker",y:1,t:3,ro:false,id:'11646'},{s:13,n:"Marvin Harrison",y:3,t:3,ro:true,id:'11628'},{s:2,n:"Deebo Samuel",y:1,t:2,ro:false,id:'5872'},{s:1,n:"Terrance Ferguson",y:2,t:3,ro:true,id:'12487'},
+  {s:1,n:"Kaelon Black",y:1,t:3,ro:true,id:'13414'},{s:1,n:"Chris Brazzell",y:1,t:3,ro:true,id:'13353'},{s:3,n:"Tyler Allgeier",y:1,t:3,ro:false,id:'8132'},{s:1,n:"Trevor Etienne",y:2,t:3,ro:true,id:'12531'},
+  {s:1,n:"Emmett Johnson",y:1,t:3,ro:true,id:'13337'},{s:5,n:"RJ Harvey",y:2,t:3,ro:true,id:'12489'},{s:6,n:"Jonathon Brooks",y:3,t:3,ro:true,id:'11583'},{s:1,n:"Ty Simpson",y:1,t:3,ro:true,id:'13275'},
+  {s:1,n:"Jalen Nailor",y:1,t:1,ro:false,id:'8180'},{s:1,n:"Chuba Hubbard",y:3,t:3,ro:false,id:'7594'},{s:3,n:"Xavier Worthy",y:3,t:3,ro:true,id:'11624'},{s:1,n:"Oscar Delp",y:1,t:3,ro:true,id:'13319'},
+  {s:2,n:"Tahj Brooks",y:2,t:3,ro:false,id:'12543'},{s:1,n:"Bryce Lance",y:1,t:3,ro:true,id:'13420'},{s:14,n:"Jeremiyah Love",y:1,t:3,ro:true,id:'13287'},{s:1,n:"Makai Lemon",y:1,t:3,ro:true,id:'13294'},
+  {s:2,n:"Keon Coleman",y:3,t:3,ro:true,id:'11637'},{s:1,n:"Adam Randall",y:1,t:3,ro:true,id:'13302'},{s:5,n:"Keaton Mitchell",y:3,t:3,ro:false,id:'9511'},{s:1,n:"Alvin Kamara",y:1,t:2,ro:false,id:'4035'},
+  {s:5,n:"Kenny Gainwell",y:1,t:1,ro:false,id:'7567'},{s:1,n:"Jordan Mason",y:3,t:3,ro:false,id:'8408'},{s:7,n:"Jadarian Price",y:1,t:3,ro:true,id:'13286'},{s:1,n:"Tank Bigsby",y:1,t:2,ro:false,id:'9225'},
+  {s:2,n:"Christian Kirk",y:1,t:2,ro:false,id:'4950'},{s:4,n:"Malik Willis",y:1,t:3,ro:false,id:'8161'},{s:1,n:"Ted Hurst",y:1,t:3,ro:true,id:'13317'},{s:1,n:"Kenyon Sadiq",y:1,t:3,ro:true,id:'13330'},
+  {s:1,n:"Tre' Harris",y:2,t:3,ro:true,id:'12509'},{s:1,n:"Luke McCaffrey",y:3,t:3,ro:true,id:'11650'},{s:1,n:"Colston Loveland",y:2,t:3,ro:true,id:'12517'},{s:3,n:"Jerry Jeudy",y:1,t:1,ro:false,id:'6783'},
+  {s:1,n:"James Conner",y:1,t:1,ro:false,id:'4137'},{s:2,n:"Cade Otton",y:1,t:3,ro:false,id:'8111'},{s:3,n:"Juwan Johnson",y:1,t:3,ro:false,id:'7002'},{s:1,n:"Woody Marks",y:2,t:3,ro:true,id:'12474'},
+  {s:1,n:"Mason Taylor",y:2,t:3,ro:true,id:'12498'},{s:3,n:"Chris Godwin",y:1,t:1,ro:false,id:'4037'},{s:1,n:"Tyreek Hill",y:1,t:2,ro:false,id:'3321'},{s:1,n:"Denzel Boston",y:1,t:3,ro:true,id:'13346'},
+  {s:1,n:"Jonah Coleman",y:1,t:3,ro:true,id:'13345'},{s:3,n:"Zach Charbonnet",y:1,t:3,ro:false,id:'9753'},{s:3,n:"Justin Fields",y:2,t:3,ro:false,id:'7591'},{s:3,n:"Keenan Allen",y:1,t:1,ro:false,id:'1479'},
+  {s:9,n:"J.K. Dobbins",y:1,t:1,ro:false,id:'6806'},{s:1,n:"Caleb Douglas",y:1,t:3,ro:true,id:'13296'},{s:6,n:"Kaleb Johnson",y:2,t:3,ro:true,id:'12504'},{s:2,n:"DeMario Douglas",y:2,t:3,ro:false,id:'9501'},
+  {s:3,n:"Jakobi Meyers",y:1,t:1,ro:false,id:'5947'},{s:1,n:"Odell Beckham",y:1,t:1,ro:false,id:'2078'},{s:1,n:"Nicholas Singleton",y:1,t:3,ro:true,id:'13288'},{s:1,n:"DJ Giddens",y:2,t:3,ro:true,id:'12471'},
+  {s:5,n:"Travis Hunter",y:2,t:3,ro:true,id:'12530',p:'WR'},{s:1,n:"T.J. Hockenson",y:1,t:1,ro:false,id:'5844'},{s:1,n:"MarShawn Lloyd",y:3,t:3,ro:true,id:'11581'},{s:1,n:"Omar Cooper",y:1,t:3,ro:true,id:'13276'},
+  {s:1,n:"Zachariah Branch",y:1,t:3,ro:true,id:'13320'},{s:1,n:"Troy Franklin",y:3,t:3,ro:true,id:'11627'},{s:1,n:"Tua Tagovailoa",y:1,t:1,ro:false,id:'6768'},{s:4,n:"Mark Andrews",y:1,t:2,ro:false,id:'5012'},
+  {s:1,n:"Chris Bell",y:1,t:3,ro:true,id:'13311'},{s:1,n:"Jordan James",y:2,t:3,ro:true,id:'12467'},{s:4,n:"Najee Harris",y:2,t:3,ro:false,id:'7528'},{s:1,n:"Josh Cameron",y:1,t:1,ro:false,id:'13394'},
+  {s:1,n:"Wan'Dale Robinson",y:2,t:3,ro:false,id:'8126'},{s:1,n:"Ja'Kobi Lane",y:1,t:3,ro:true,id:'13293'},{s:1,n:"Germie Bernard",y:1,t:3,ro:true,id:'13274'},{s:1,n:"Malachi Fields",y:1,t:3,ro:true,id:'13285'},
+  {s:3,n:"Kayshon Boutte",y:1,t:1,ro:false,id:'9504'},{s:5,n:"AJ Barner",y:1,t:3,ro:false,id:'11603'},{s:1,n:"Mike Washington",y:1,t:3,ro:true,id:'13305'},{s:10,n:"George Kittle",y:1,t:3,ro:false,id:'4217'},
+  {s:1,n:"Kyle Williams",y:2,t:3,ro:true,id:'12547'},{s:1,n:"Baker Mayfield",y:3,t:3,ro:false,id:'4892'},{s:6,n:"Jaylen Warren",y:3,t:3,ro:false,id:'8228'},{s:1,n:"Cyrus Allen",y:1,t:3,ro:true,id:'13413'},
+  {s:1,n:"Seth McGowan",y:1,t:2,ro:false,id:'13424'},{s:1,n:"Elijah Sarratt",y:1,t:3,ro:true,id:'13268'},{s:2,n:"Brian Thomas",y:3,t:3,ro:true,id:'11631'},{s:5,n:"Aaron Jones",y:1,t:1,ro:false,id:'4199'},
+  {s:1,n:"Kevin Coleman",y:1,t:3,ro:false,id:'13338'},{s:3,n:"Carnell Tate",y:1,t:3,ro:true,id:'13279'},{s:10,n:"Omarion Hampton",y:2,t:3,ro:true,id:'12507'},{s:4,n:"Ollie Gordon",y:2,t:3,ro:false,id:'12495'},
+  {s:11,n:"DJ Moore",y:1,t:1,ro:false,id:'4983'},{s:1,n:"Skyler Bell",y:1,t:3,ro:true,id:'13402'},{s:1,n:"Braelon Allen",y:3,t:3,ro:true,id:'11576'},{s:1,n:"Aaron Rodgers",y:1,t:1,ro:false,id:'96'},
+  {s:1,n:"Colbie Young",y:1,t:3,ro:false,id:'13477'},{s:3,n:"Jordyn Tyson",y:1,t:3,ro:true,id:'13281'},{s:1,n:"Carson Beck",y:1,t:3,ro:true,id:'13272'},{s:4,n:"Stefon Diggs",y:2,t:3,ro:false,id:'2449'},
+  {s:1,n:"Kaytron Allen",y:1,t:3,ro:true,id:'13405'},{s:3,n:"Tre Tucker",y:1,t:1,ro:false,id:'10213'},{s:1,n:"Oronde Gadsden",y:1,t:3,ro:false,id:'12493'},{s:1,n:"KC Concepcion",y:1,t:3,ro:true,id:'13298'},
+  {s:9,n:"DeVonta Smith",y:3,t:3,ro:false,id:'7525'},{s:2,n:"Kyler Murray",y:1,t:2,ro:false,id:'5849'},{s:2,n:"Greg Dulcich",y:1,t:3,ro:false,id:'8172'},{s:1,n:"Max Klare",y:1,t:3,ro:true,id:'13278'},
+  {s:7,n:"Courtland Sutton",y:1,t:1,ro:false,id:'5045'},{s:1,n:"Eli Raridon",y:1,t:3,ro:true,id:'13421'},{s:12,n:"Mike Evans",y:1,t:1,ro:false,id:'2216'},{s:8,n:"Kimani Vidal",y:1,t:1,ro:false,id:'11647'},
 ];
 
 // ── CAP PENALTIES / BONUSES ──
 // Positive = counts AGAINST the cap. Negative = team GAINS cap space.
 // Items with year:2027 are deferred and excluded from current-year totals.
 const CAP_ADJUSTMENTS = {
-  'jpeezy88': [
-    { amount: -1, note: 'Carry over' },
-    { amount: -1, note: 'From Brad' },
-    { amount: -14, note: 'From Brad' },
+  'jpeezy88': [            // John
+    { amount: 3,   note: 'To Cody' },
   ],
-  'tomhardyshardcocl': [
-    { amount: 1, note: 'Davis' },
-    { amount: 1, note: 'Arroyo' },
-    { amount: 1, note: 'Mooney' },
+  'JBOYCOTT89': [          // Joe
+    { amount: -3,  note: 'Carry over' },
   ],
-  'TMcLeod19': [
-    { amount: -2, note: 'Carry over' },
+  'tomhardyshardcock': [   // Garrett
+    { amount: -3,  note: 'Carry over' },
+    { amount: 1,   note: 'Njoku' },
   ],
-  'bianchba': [
-    { amount: 4,  note: 'To Cody' },
-    { amount: 3,  note: 'Pitts' },
-    { amount: 2,  note: 'Cousins/Gibson' },
-    { amount: 1,  note: 'To John' },
-    { amount: 2,  note: 'Tanking' },
-    { amount: 3,  note: 'Mixon' },
-    { amount: 14, note: 'To John' },
-    { amount: 2,  note: 'Mixon', year: 2027 }, // deferred — does not count this year
+  'bianchba': [            // Brad
+    { amount: 2,   note: 'Mixon' },
+    { amount: 1,   note: 'Hockenson' },
+    { amount: 20,  note: 'To Alec' },
+    { amount: 3,   note: 'To Matt' },
   ],
-  'cmurdaakathetruth': [
-    { amount: -4, note: 'From Brad' },
+  'cmurdaakathetruth': [   // Cody
+    { amount: -2,  note: 'Carry over' },
+    { amount: -3,  note: 'From John' },
+    { amount: -2,  note: 'From Beez' },
   ],
-  'AOlson519': [
-    { amount: -2, note: 'Carry over' },
-    { amount: 2,  note: 'Singletary/Wicks' },
-    { amount: 1,  note: 'Steele' },
-    { amount: 1,  note: 'McLaughlin' },
+  'AOlson519': [           // Alec
+    { amount: -20, note: 'From Brad' },
+    { amount: 1,   note: 'Smith' },
   ],
-  'jujushitpoopster': [
-    { amount: -1, note: 'Carry over' },
-    { amount: 1,  note: 'Baker' },
+  'jujushitpoopster': [    // Matt
+    { amount: -10, note: 'Carry over' },
+    { amount: -3,  note: 'From Brad' },
   ],
-  'Beezneez': [
-    { amount: -1, note: 'Carry over' },
+  'Beezneez': [            // Beez
+    { amount: -1,  note: 'Carry over' },
+    { amount: 2,   note: 'To Cody' },
   ],
-  'JuiceManRic': [
-    { amount: -1, note: 'Carry over' },
+  'JuiceManRic': [         // Baum
+    { amount: 1,   note: 'Moore' },
   ],
 };
 
@@ -2393,20 +2293,7 @@ for (const [key, adjs] of Object.entries(CAP_ADJUSTMENTS)) {
 
 function getCapAdjustments(ownerName) {
   if (!ownerName) return [];
-  const key = ownerName.toLowerCase().replace(/\s+/g,'');
-  for (const [k, adjs] of Object.entries(CAP_ADJ_BY_OWNER)) {
-    if (key === k.replace(/\s+/g,'') || ownerName.toLowerCase().includes(k) || k.includes(ownerName.toLowerCase())) {
-      return adjs;
-    }
-  }
-  // Also try partial match on the original owner string
-  const ownerLower = ownerName.toLowerCase();
-  for (const [k, adjs] of Object.entries(CAP_ADJ_BY_OWNER)) {
-    if (ownerLower.startsWith(k.slice(0,6)) || k.startsWith(ownerLower.slice(0,6))) {
-      return adjs;
-    }
-  }
-  return [];
+  return CAP_ADJ_BY_OWNER[ownerName.toLowerCase().replace(/\s+/g,'')] || [];
 }
 
 // Normalize name for fuzzy matching
@@ -2477,10 +2364,12 @@ async function loadSalaryData() {
 
   for (const c of CONTRACT_LIST) {
     const norm = normName(c.n);
-    let matchedPid = null;
+    // Direct Sleeper player ID (exact, no name guessing)
+    let matchedPid = (c.id && players[c.id]) ? c.id : null;
+    if (!matchedPid && c.id && playerOwner[c.id]) matchedPid = c.id;
 
     // Exact name match
-    for (const [pid, pl] of Object.entries(players)) {
+    if (!matchedPid) for (const [pid, pl] of Object.entries(players)) {
       if (normName(pl.name||'') === norm) {
         // If we have a position hint, prefer the match with the right position
         if (c.hint && pl.pos && pl.pos !== c.hint) continue;
@@ -2514,7 +2403,7 @@ async function loadSalaryData() {
       }
     }
     const owner = matchedPid ? (playerOwner[matchedPid] || 'Free Agent') : 'Unknown';
-    const pos = matchedPid ? (players[matchedPid]?.pos || '') : '';
+    const pos = c.p || (matchedPid ? (players[matchedPid]?.pos || '') : '');
     const nflTeam = matchedPid ? (players[matchedPid]?.team || '') : '';
     matched.push({...c, pid: matchedPid, owner, pos, nflTeam});
   }
@@ -2543,8 +2432,8 @@ function tabSalaries() {
       <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase">Loading roster assignments...</span>
     </div>`;
     try {
-      const data = await loadSalaryData();
-      renderSalaryContent(data);
+      await loadSalaryData();
+      window.setSalaryView(salaryView); // restores the active view button + renders
     } catch(e) {
       el.innerHTML = `<p style="color:var(--red-text);font-family:var(--font-mono);font-size:12px">Error loading salary data: ${e.message}</p>`;
     }
@@ -2695,7 +2584,7 @@ function renderSalaryContent(data) {
             })()}
             <div style="flex:1;min-width:0">
               <div style="font-family:var(--font-display);font-size:16px;font-weight:800;text-transform:uppercase;color:var(--text);letter-spacing:0.02em">${owner}</div>
-              <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">${contracts.length} players · ${expiring} expiring${adjs.length ? ` · <span style="color:${adjTotal<0?'var(--green-text)':'var(--amber-text)'}">cap adj: ${adjTotal>=0?'+':''}$${adjTotal}</span>` : ''}</div>
+              <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">${contracts.length} players · ${expiring} expiring${adjs.length ? ` · <span style="color:${adjTotal<0?'var(--green-text)':'var(--amber-text)'}">cap adj: ${adjTotal>=0?'+$'+adjTotal:'-$'+Math.abs(adjTotal)}</span>` : ''}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-family:var(--font-display);font-size:22px;font-weight:800;color:var(--gold);line-height:1">$${total}<span style="font-size:13px;color:var(--text3);font-weight:400"> / $${CAP}</span></div>
